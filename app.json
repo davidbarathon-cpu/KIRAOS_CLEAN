@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "KiraOS_Clean",
+    "scheme": "KiraOS_Clean",
+    "slug": "KiraOS_Clean",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#6C63FF"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Kira a besoin d'accéder à tes photos pour analyser tes plantes.",
+          "cameraPermission": "Kira a besoin de la caméra pour photographier tes plantes."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Kira a besoin du micro pour t'écouter.",
+          "speechRecognitionPermission": "Kira a besoin de la reconnaissance vocale pour comprendre ce que tu dis."
+        }
+      ],
+      "expo-web-browser",
+      "expo-sharing",
+      "expo-speech-recognition",
+      "expo-quick-actions"
+    ],
+    "android": {
+      "permissions": [
+        "NOTIFICATIONS",
+        "SCHEDULE_EXACT_ALARM",
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "RECORD_AUDIO"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.bdadoo.KiraOS_Clean"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "fb9b1dc2-4544-41d6-b981-72e30689f800"
+      }
+    }
+  }
+}

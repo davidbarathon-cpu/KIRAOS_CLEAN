@@ -2,6 +2,10 @@
 //  HOMESCREEN.JS — Journal de bord (accueil)
 //  MISE À JOUR LOT 5 : Traduction, Musique, Réveil,
 //  Domotique + bouton Paramètres maintenant fonctionnel
+//  MISE À JOUR LOT 31 : les modules personnalisés créés
+//  par l'utilisateur (Paramètres → Modules → Créer un
+//  module) apparaissent désormais dans cette même grille,
+//  mélangés avec les modules natifs de l'app.
 // ═══════════════════════════════════════════
 
 import { useFocusEffect } from '@react-navigation/native';
@@ -19,6 +23,7 @@ import { Chip, KiraFAB, ModuleCard, ProgressRing, SectionLabel } from '../compon
 import { analyzeContext, generatePredictions } from '../utils/kiraBrain';
 import { getData } from '../utils/storage';
 import { getTheme, KIRA_STATE_COLORS, KIRA_STATE_LABELS, PALETTE } from '../utils/theme';
+import { getCustomModules, versEntreeModuleAccueil } from '../utils/customModules';
 
 const DICTONS = [
   { t: 'La musique est la sténographie des émotions.', a: 'Tolstoï' },
@@ -58,16 +63,19 @@ export default function HomeScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(new Date());
   const [modulesActifs, setModulesActifs] = useState(TOUS_MODULES.map(m => m.id));
+  const [modulesPersonnalises, setModulesPersonnalises] = useState([]);
 
   const loadData = useCallback(async () => {
-    const [s, a, m] = await Promise.all([
+    const [s, a, m, customs] = await Promise.all([
       getData('sante'),
       getData('agenda'),
       getData('modules_actifs'),
+      getCustomModules(),
     ]);
     setSante(s || {});
     setAgenda(a || []);
     if (m && m.length) setModulesActifs(m);
+    setModulesPersonnalises(customs);
     const heureStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     setKiraState(analyzeContext(a || [], s || {}, heureStr));
     setPredictions(generatePredictions(a || [], s || {}, heureStr));
@@ -87,6 +95,12 @@ export default function HomeScreen({ navigation }) {
   const kLabel = KIRA_STATE_LABELS[kiraState];
 
   const modulesAffiches = TOUS_MODULES.filter(m => modulesActifs.includes(m.id));
+  // Les modules personnalisés s'ajoutent toujours à la grille (pas de filtre
+  // modulesActifs sur eux — l'utilisateur les supprime depuis le constructeur
+  // s'il n'en veut plus, plutôt que de les "désactiver" temporairement, ce qui
+  // ajouterait une case de complexité inutile pour un module qu'il a lui-même créé).
+  const modulesPersonnalisesAffiches = modulesPersonnalises.map(versEntreeModuleAccueil);
+  const tousLesModulesAffiches = [...modulesAffiches, ...modulesPersonnalisesAffiches];
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
@@ -190,13 +204,16 @@ export default function HomeScreen({ navigation }) {
             )}
           </View>
 
-          {/* Grille modules — filtrée selon les préférences */}
-          <SectionLabel style={{ marginTop: 18, marginBottom: 10 }}>Modules ({modulesAffiches.length})</SectionLabel>
+          {/* Grille modules — filtrée selon les préférences + modules personnalisés */}
+          <SectionLabel style={{ marginTop: 18, marginBottom: 10 }}>Modules ({tousLesModulesAffiches.length})</SectionLabel>
           <View style={styles.modulesGrid}>
-            {modulesAffiches.map(m => (
-              <ModuleCard key={m.id} icon={m.icon} label={m.label} desc={m.desc} color={m.color} theme={theme} onPress={() => navigation.navigate(m.screen)} />
+            {tousLesModulesAffiches.map(m => (
+              <ModuleCard key={m.id} icon={m.icon} label={m.label} desc={m.desc} color={m.color} theme={theme} onPress={() => navigation.navigate(m.screen, m.params)} />
             ))}
           </View>
+          <TouchableOpacity style={styles.creerModuleBtn} onPress={() => navigation.navigate('CreerModule')}>
+            <Text style={[styles.creerModuleText, { color: theme.accent }]}>✨ Créer un nouveau module personnalisé</Text>
+          </TouchableOpacity>
           <Text style={styles.comingSoon}>
             🎉 Tous les modules du cahier des charges sont créés ! Prochaines étapes : vraies
             connexions API (météo, Google Agenda, actualités), notifications, et le micro
@@ -242,5 +259,7 @@ const styles = StyleSheet.create({
   agendaDot: { width: 3, height: 3, borderRadius: 2 },
   agendaEvent: { fontSize: 12, color: '#e0e0f0', flex: 1 },
   modulesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  creerModuleBtn: { padding: 12, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', marginTop: 12 },
+  creerModuleText: { fontWeight: '600', fontSize: 13 },
   comingSoon: { fontSize: 11, color: '#333344', textAlign: 'center', marginTop: 16, lineHeight: 16 },
 });

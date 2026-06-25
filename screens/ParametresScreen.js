@@ -5,7 +5,8 @@
 //  de création sous chaque fournisseur.
 // ═══════════════════════════════════════════
 
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert, Linking,
@@ -36,6 +37,7 @@ import {
   TRADUCTION_PROVIDERS,
   WEATHER_PROVIDER,
 } from '../utils/apiKeys';
+import { getCustomModules, supprimerCustomModule } from '../utils/customModules';
 import { apparierAvecBridge } from '../utils/driverPhilipsHue';
 import { deconnecterGoogle, estConnecteAGoogle, getGoogleClientId, setGoogleClientId } from '../utils/googleAuth';
 import {
@@ -77,6 +79,7 @@ export default function ParametresScreen({ navigation }) {
   const [profil, setProfil] = useState({});
   const [prefs, setPrefs] = useState({});
   const [modulesActifs, setModulesActifs] = useState([]);
+  const [modulesPersonnalises, setModulesPersonnalises] = useState([]);
   const [saved, setSaved] = useState(false);
 
   // ── État spécifique à la section API ──
@@ -99,6 +102,14 @@ export default function ParametresScreen({ navigation }) {
   const [traductionProviderActif, setTraductionProviderActif] = useState('deepl');
   const [actualitesProvidersActifs, setActualitesProvidersActifsState] = useState(['newsapi']);
   const [kiraIconActive, setKiraIconActiveState] = useState('etoile');
+
+  // Recharge les modules personnalisés chaque fois que l'écran reprend le
+  // focus (ex: retour depuis le constructeur après avoir créé/modifié un
+  // module) — sans ça, la liste resterait figée à l'état du premier montage.
+  const chargerModulesPersonnalises = useCallback(async () => {
+    setModulesPersonnalises(await getCustomModules());
+  }, []);
+  useFocusEffect(useCallback(() => { chargerModulesPersonnalises(); }, [chargerModulesPersonnalises]));
 
   useEffect(() => {
     (async () => {
@@ -384,6 +395,49 @@ export default function ParametresScreen({ navigation }) {
               </View>
             );
           })}
+
+          <SectionLabel style={{ marginTop: 22 }}>✨ Mes modules personnalisés</SectionLabel>
+          {modulesPersonnalises.length === 0 ? (
+            <Text style={styles.infoSmall}>
+              Tu n'as encore créé aucun module personnalisé. Crée le tien ci-dessous : une
+              liste avec tes propres champs, comme Courses ou Notes, mais pour ce que tu veux
+              (matériel de pêche, suivi d'entretien voiture, collection...).
+            </Text>
+          ) : (
+            modulesPersonnalises.map(m => (
+              <View key={m.id} style={[styles.moduleRow, { borderColor: m.color + '33', borderWidth: 1 }]}>
+                <Text style={{ fontSize: 16 }}>{m.icon}</Text>
+                <Text style={styles.moduleLabel}>{m.nom}</Text>
+                <TouchableOpacity
+                  style={[styles.smallBtn, { backgroundColor: accent + '20', borderColor: accent + '40', borderWidth: 1 }]}
+                  onPress={() => navigation.navigate('CreerModule', { moduleId: m.id })}
+                >
+                  <Text style={[styles.smallBtnText, { color: accent }]}>Modifier</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.smallBtnDanger}
+                  onPress={() => {
+                    Alert.alert(
+                      '⚠️ Supprimer ce module',
+                      `"${m.nom}" et toutes ses données seront définitivement supprimés.`,
+                      [
+                        { text: 'Annuler', style: 'cancel' },
+                        {
+                          text: 'Supprimer', style: 'destructive',
+                          onPress: async () => { await supprimerCustomModule(m.id); chargerModulesPersonnalises(); },
+                        },
+                      ]
+                    );
+                  }}
+                >
+                  <Text style={styles.smallBtnDangerText}>Suppr.</Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
+          <TouchableOpacity style={[styles.createModuleBtn, { borderColor: accent + '40' }]} onPress={() => navigation.navigate('CreerModule')}>
+            <Text style={{ color: accent, fontWeight: '600', fontSize: 13 }}>✨ Créer un module personnalisé</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -972,6 +1026,7 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 9 },
   toggleLabel: { fontSize: 13, color: '#ccc' },
   moduleRow: { flexDirection: 'row', alignItems: 'center', gap: 11, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 11, padding: 11, marginBottom: 6 },
+  createModuleBtn: { padding: 13, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', marginTop: 14 },
   moduleLabel: { flex: 1, fontSize: 12, fontWeight: '600', color: '#fff' },
   comingSoon: { fontSize: 11, color: '#333344', textAlign: 'center', marginTop: 14, lineHeight: 16 },
   kiraHeader: { alignItems: 'center', padding: 18, borderRadius: 16, borderWidth: 1 },

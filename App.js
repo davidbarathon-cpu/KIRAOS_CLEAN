@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import ActualitesScreen from './screens/ActualitesScreen';
 import AgendaScreen from './screens/AgendaScreen';
 import CoursesScreen from './screens/CoursesScreen';
+import CreerModuleScreen from './screens/CreerModuleScreen';
 import CuisineScreen from './screens/CuisineScreen';
 import DomotiqueScreen from './screens/DomotiqueScreen';
 import EcouteRapideScreen from './screens/EcouteRapideScreen';
@@ -15,6 +16,7 @@ import HomeScreen from './screens/HomeScreen';
 import HoroscopeScreen from './screens/HoroscopeScreen';
 import KiraChatScreen from './screens/KiraChatScreen';
 import MeteoScreen from './screens/MeteoScreen';
+import ModulePersonnaliseScreen from './screens/ModulePersonnaliseScreen';
 import MusiqueScreen from './screens/MusiqueScreen';
 import NotesScreen from './screens/NotesScreen';
 import ParametresScreen from './screens/ParametresScreen';
@@ -108,6 +110,8 @@ export default function App() {
           <Stack.Screen name="Reveil" component={ReveilScreen} />
           <Stack.Screen name="Domotique" component={DomotiqueScreen} />
           <Stack.Screen name="Parametres" component={ParametresScreen} />
+          <Stack.Screen name="ModulePersonnalise" component={ModulePersonnaliseScreen} />
+          <Stack.Screen name="CreerModule" component={CreerModuleScreen} />
           <Stack.Screen
             name="EcouteRapide"
             component={EcouteRapideScreen}

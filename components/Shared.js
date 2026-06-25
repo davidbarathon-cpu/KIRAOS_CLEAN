@@ -147,7 +147,7 @@ export function ModuleCard({ icon, label, desc, color, onPress, theme }) {
 // Utilise maintenant KiraIcon, qui charge l'icône choisie par l'utilisateur
 // dans les Paramètres (étoile, spirale, orbe électrique...) au lieu d'une
 // étoile fixe codée en dur.
-export function KiraFAB({ onPress, color = PALETTE.purple }) {
+export function KiraFAB({ onPress, color = PALETTE.purple, kiraState }) {
   const [iconId, setIconId] = useState('etoile');
 
   useEffect(() => {
@@ -157,7 +157,7 @@ export function KiraFAB({ onPress, color = PALETTE.purple }) {
   return (
     <View style={styles.fabWrap}>
       <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={styles.fabTouch}>
-        <KiraIcon size={62} color={color} iconId={iconId} emojiSize={28} />
+        <KiraIcon size={62} color={color} iconId={iconId} emojiSize={28} kiraState={kiraState} />
       </TouchableOpacity>
     </View>
   );
@@ -167,14 +167,14 @@ export function KiraFAB({ onPress, color = PALETTE.purple }) {
 // À utiliser dans les écrans de modules, le chat, etc. pour une présence
 // cohérente de Kira partout dans l'app (demande explicite : "la retrouver
 // sur toutes les pages").
-export function KiraHeaderIcon({ size = 30, color = PALETTE.purple, onPress }) {
+export function KiraHeaderIcon({ size = 30, color = PALETTE.purple, onPress, kiraState }) {
   const [iconId, setIconId] = useState('etoile');
 
   useEffect(() => {
     getActiveKiraIcon().then(setIconId);
   }, []);
 
-  const contenu = <KiraIcon size={size} color={color} iconId={iconId} />;
+  const contenu = <KiraIcon size={size} color={color} iconId={iconId} kiraState={kiraState} />;
 
   if (!onPress) return contenu;
 

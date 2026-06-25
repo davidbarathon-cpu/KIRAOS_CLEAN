@@ -29,6 +29,7 @@ import TraductionScreen from './screens/TraductionScreen';
 import { demanderPermissionNotifications } from './utils/notifications';
 import { initStorage } from './utils/storage';
 import { THEMES } from './utils/theme';
+import WeatherFX from './components/WeatherFX';
 
 const Stack = createNativeStackNavigator();
 
@@ -119,6 +120,11 @@ export default function App() {
           />
         </Stack.Navigator>
       </NavigationContainer>
+
+      {/* Effets météo globaux (lot 29) : flottent au-dessus de toute la
+          navigation, ne bloquent jamais les touchers (pointerEvents="none"
+          en interne dans WeatherFX). */}
+      <WeatherFX />
     </>
   );
 }

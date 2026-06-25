@@ -222,7 +222,7 @@ export default function HomeScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      <KiraFAB color={theme.accent} onPress={() => navigation.navigate('KiraChat')} />
+      <KiraFAB color={theme.accent} onPress={() => navigation.navigate('KiraChat')} kiraState={kiraState} />
     </View>
   );
 }

@@ -258,7 +258,7 @@ export default function KiraChatScreen({ navigation }) {
     <KeyboardAvoidingView style={[styles.root, { backgroundColor: theme.bg }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.header, { backgroundColor: theme.accent + '15', borderColor: theme.accent + '30' }]}>
         <View style={styles.avatarWrap}>
-          <KiraIcon size={42} color={theme.accent} iconId={kiraIconActive} emojiSize={20} />
+          <KiraIcon size={42} color={theme.accent} iconId={kiraIconActive} emojiSize={20} kiraState={appState.kiraState} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.kiraName}>Kira</Text>

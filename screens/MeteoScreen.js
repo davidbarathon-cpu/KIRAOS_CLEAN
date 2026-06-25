@@ -14,15 +14,9 @@ import { getAllApiKeys } from '../utils/apiKeys';
 import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
 import { getMeteoReelle } from '../utils/weatherCaller';
+import { getPhaseLunaireActuelle, getProchainesPhasesPrincipales } from '../utils/moonPhase';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-
-const PHASES_LUNE = [
-  { nom: 'Nouvelle Lune', icon: '🌑', date: '22 juin' },
-  { nom: 'Premier Quartier', icon: '🌓', date: '29 juin' },
-  { nom: 'Pleine Lune', icon: '🌕', date: '6 juillet' },
-  { nom: 'Dernier Quartier', icon: '🌗', date: '13 juillet' },
-];
 
 function getWeatherEffect(condition) {
   const c = (condition || '').toLowerCase();
@@ -130,6 +124,9 @@ export default function MeteoScreen({ navigation }) {
   }
 
   const effect = getWeatherEffect(meteo.condition);
+  // Calcul léger (pas d'appel réseau), recalculé à chaque rendu de l'écran.
+  const phaseLuneActuelle = getPhaseLunaireActuelle();
+  const prochainesPhases = getProchainesPhasesPrincipales();
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
@@ -230,12 +227,12 @@ export default function MeteoScreen({ navigation }) {
         {tab === 'lune' && (
           <View>
             <View style={styles.moonBox}>
-              <Text style={styles.moonIcon}>🌓</Text>
-              <Text style={styles.moonName}>Premier Quartier</Text>
-              <Text style={styles.moonSub}>Lune à 48% · Levée 14h32 · Couchée 02h15</Text>
+              <Text style={styles.moonIcon}>{phaseLuneActuelle.icon}</Text>
+              <Text style={styles.moonName}>{phaseLuneActuelle.nom}</Text>
+              <Text style={styles.moonSub}>Lune illuminée à {phaseLuneActuelle.illumination}%</Text>
             </View>
             <View style={[styles.phasesBox, { borderColor: 'rgba(255,255,255,0.06)' }]}>
-              {PHASES_LUNE.map((p, i) => (
+              {prochainesPhases.map((p, i) => (
                 <View key={i} style={styles.phaseRow}>
                   <Text style={{ fontSize: 18 }}>{p.icon}</Text>
                   <Text style={styles.phaseName}>{p.nom}</Text>
@@ -244,7 +241,9 @@ export default function MeteoScreen({ navigation }) {
               ))}
             </View>
             <Text style={styles.comingSoon}>
-              🚧 Les phases lunaires précises nécessitent un calcul astronomique dédié — données indicatives pour l'instant.
+              ⓘ Calcul astronomique réel (cycle synodique lunaire). Les heures précises de
+              lever/coucher de lune dépendraient de ta position géographique exacte — non
+              affichées pour rester fiables sans demander ta localisation.
             </Text>
           </View>
         )}

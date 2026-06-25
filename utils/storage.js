@@ -1,11 +1,21 @@
 // ═══════════════════════════════════════════
 //  STORAGE.JS — Persistance locale (AsyncStorage)
-//  MISE À JOUR LOT 3 :
-//  - profil.signe ajouté aux valeurs par défaut
-//  - clé "notes" ajoutée aux DEFAULTS
+//  MISE À JOUR LOT 30 : sécurité.
+//  Certaines clés sont désormais automatiquement
+//  redirigées vers un stockage CHIFFRÉ (Keystore
+//  Android, via expo-secure-store) au lieu d'
+//  AsyncStorage en clair : les clés API de tous
+//  les fournisseurs, les jetons OAuth Google et
+//  Spotify, et la config Philips Hue.
+//
+//  Ce réaiguillage est TRANSPARENT : getData/setData/
+//  removeData fonctionnent exactement comme avant pour
+//  tout le reste du code (agenda, notes, profil...).
+//  Aucun fichier appelant n'a besoin d'être modifié.
 // ═══════════════════════════════════════════
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSecureData, setSecureData, removeSecureData, CLES_SENSIBLES } from './secureStorage';
 
 const PREFIX = 'kiraos_';
 
@@ -65,6 +75,8 @@ const DEFAULTS = {
 /**
  * Initialise le stockage : si c'est le tout premier lancement,
  * écrit les valeurs par défaut. Sinon ne touche à rien.
+ * (Les clés sensibles n'ont pas de valeur par défaut à initialiser :
+ * elles restent absentes jusqu'à ce que l'utilisateur saisisse une clé.)
  */
 export async function initStorage() {
   try {
@@ -85,8 +97,12 @@ export async function initStorage() {
 /**
  * Récupère une valeur stockée (ex: getData('agenda'))
  * Retourne la valeur par défaut si rien n'est trouvé.
+ * Redirige automatiquement vers le stockage chiffré si la clé est sensible.
  */
 export async function getData(key) {
+  if (CLES_SENSIBLES.includes(key)) {
+    return getSecureData(key);
+  }
   try {
     const raw = await AsyncStorage.getItem(PREFIX + key);
     if (raw === null) return DEFAULTS[key] ?? null;
@@ -99,8 +115,12 @@ export async function getData(key) {
 
 /**
  * Sauvegarde une valeur (ex: setData('agenda', [...]))
+ * Redirige automatiquement vers le stockage chiffré si la clé est sensible.
  */
 export async function setData(key, value) {
+  if (CLES_SENSIBLES.includes(key)) {
+    return setSecureData(key, value);
+  }
   try {
     await AsyncStorage.setItem(PREFIX + key, JSON.stringify(value));
     return true;
@@ -112,8 +132,12 @@ export async function setData(key, value) {
 
 /**
  * Efface une clé spécifique
+ * Redirige automatiquement vers le stockage chiffré si la clé est sensible.
  */
 export async function removeData(key) {
+  if (CLES_SENSIBLES.includes(key)) {
+    return removeSecureData(key);
+  }
   try {
     await AsyncStorage.removeItem(PREFIX + key);
     return true;
@@ -123,13 +147,18 @@ export async function removeData(key) {
 }
 
 /**
- * Remet à zéro toute l'application (à utiliser depuis les Paramètres)
+ * Remet à zéro toute l'application (à utiliser depuis les Paramètres).
+ * MISE À JOUR : efface désormais AUSSI les données chiffrées (clés API,
+ * jetons OAuth, config Hue) — avant cette mise à jour, un reset laissait
+ * ces données sensibles intactes, ce qui n'était pas le comportement
+ * attendu par l'utilisateur qui clique "Réinitialiser l'application".
  */
 export async function resetAllData() {
   try {
     const keys = await AsyncStorage.getAllKeys();
     const kiraKeys = keys.filter(k => k.startsWith(PREFIX));
     await AsyncStorage.multiRemove(kiraKeys);
+    await Promise.all(CLES_SENSIBLES.map(cle => removeSecureData(cle)));
     await initStorage();
     return true;
   } catch (e) {

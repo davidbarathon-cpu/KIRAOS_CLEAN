@@ -990,14 +990,14 @@ export default function ParametresScreen({ navigation }) {
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>⚙️ Paramètres</Text>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow} style={styles.tabsScroll}>
         {SECTIONS.map(s => (
           <TouchableOpacity key={s.id} style={[styles.tabChip, { backgroundColor: section === s.id ? accent : 'rgba(255,255,255,0.06)' }]} onPress={() => setSection(s.id)}>
             <Text style={{ fontSize: 11, color: section === s.id ? '#000' : '#888899', fontWeight: section === s.id ? '700' : '400' }}>{s.l}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>{renderSection()}</ScrollView>
+      <ScrollView style={styles.contenuScroll} contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>{renderSection()}</ScrollView>
     </View>
   );
 }
@@ -1006,7 +1006,16 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 50, paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: 1 },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  // CORRECTIF : la barre d'onglets horizontale ne doit JAMAIS s'étirer —
+  // flexGrow: 0 fige sa hauteur à son contenu naturel, pour qu'elle ne vole
+  // pas d'espace à la zone de contenu en dessous.
+  tabsScroll: { flexGrow: 0, flexShrink: 0 },
   tabsRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 6 },
+  // CORRECTIF : sans flex: 1 explicite ici, cette ScrollView (qui affiche
+  // tout le contenu de chaque section : Profil, Apparence, API...) pouvait
+  // se retrouver comprimée à une hauteur quasi nulle par le View racine en
+  // flex: 1 — c'était la cause du bug "on ne voit que la partie supérieure".
+  contenuScroll: { flex: 1 },
   tabChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 99 },
   profileHeader: { alignItems: 'center', paddingVertical: 16 },
   avatarBig: { width: 76, height: 76, borderRadius: 38, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },

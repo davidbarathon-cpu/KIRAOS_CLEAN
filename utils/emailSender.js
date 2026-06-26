@@ -4,9 +4,15 @@
 //  jointes binaires depuis une simple requête REST
 //  mobile sans backend — on utilise donc le format
 //  attachments en base64, supporté par leur API.
+//
+//  CORRECTIF LOT 32 : FileSystem.readAsStringAsync()
+//  (API "legacy") jette désormais une erreur de
+//  dépréciation au runtime sur Expo SDK 54+. Remplacé
+//  par la classe File de la nouvelle API
+//  expo-file-system, stable depuis le SDK 54.
 // ═══════════════════════════════════════════
 
-import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
 
@@ -31,7 +37,8 @@ export async function envoyerEmailAvecPdf(apiKey, destinataire, sujet, corpsHtml
 
   try {
     // Lit le PDF local et le convertit en base64 pour l'envoyer en pièce jointe
-    const base64 = await FileSystem.readAsStringAsync(pdfUri, { encoding: FileSystem.EncodingType.Base64 });
+    const fichier = new File(pdfUri);
+    const base64 = await fichier.base64();
 
     const res = await fetch(RESEND_API_URL, {
       method: 'POST',

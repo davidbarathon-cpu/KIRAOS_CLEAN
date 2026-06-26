@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════
 
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -24,6 +24,8 @@ import { analyzeContext, generatePredictions } from '../utils/kiraBrain';
 import { getData } from '../utils/storage';
 import { getTheme, KIRA_STATE_COLORS, KIRA_STATE_LABELS, PALETTE } from '../utils/theme';
 import { getCustomModules, versEntreeModuleAccueil } from '../utils/customModules';
+import { getAllApiKeys } from '../utils/apiKeys';
+import { getMeteoReelle } from '../utils/weatherCaller';
 
 const DICTONS = [
   { t: 'La musique est la sténographie des émotions.', a: 'Tolstoï' },
@@ -32,8 +34,6 @@ const DICTONS = [
   { t: 'Un accord de guitare bien joué vaut mille mots.', a: 'Sagesse musicale' },
   { t: 'Chanter, c\'est prier deux fois.', a: 'Saint Augustin' },
 ];
-
-const METEO_PREVIEW = { temp: 22, icon: '⛅' };
 
 const TOUS_MODULES = [
   { id: 'agenda',     icon: '📅', label: 'Agenda',         desc: 'Mes événements',     color: PALETTE.purple,  screen: 'Agenda' },
@@ -64,6 +64,27 @@ export default function HomeScreen({ navigation }) {
   const [now, setNow] = useState(new Date());
   const [modulesActifs, setModulesActifs] = useState(TOUS_MODULES.map(m => m.id));
   const [modulesPersonnalises, setModulesPersonnalises] = useState([]);
+  const [meteo, setMeteo] = useState({ temp: null, icon: '⛅' });
+  const dernierAppelMeteo = useRef(0);
+
+  const QUINZE_MINUTES_MS = 15 * 60 * 1000;
+
+  const chargerMeteo = useCallback(async () => {
+    // Cache simple : on ne rappelle l'API que si plus de 15 minutes se sont
+    // écoulées depuis le dernier appel — l'accueil revient en focus très
+    // souvent (à chaque retour depuis un module), pas besoin de re-vérifier
+    // la météo à chaque fois.
+    const maintenant = Date.now();
+    if (maintenant - dernierAppelMeteo.current < QUINZE_MINUTES_MS && meteo.temp !== null) {
+      return;
+    }
+    dernierAppelMeteo.current = maintenant;
+
+    const [profil, keys] = await Promise.all([getData('profil'), getAllApiKeys()]);
+    const ville = profil?.ville || 'Villeneuve-sur-Lot';
+    const data = await getMeteoReelle(ville, keys?.openweathermap);
+    setMeteo({ temp: data.temp, icon: data.icon });
+  }, [meteo.temp]);
 
   const loadData = useCallback(async () => {
     const [s, a, m, customs] = await Promise.all([
@@ -79,7 +100,8 @@ export default function HomeScreen({ navigation }) {
     const heureStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     setKiraState(analyzeContext(a || [], s || {}, heureStr));
     setPredictions(generatePredictions(a || [], s || {}, heureStr));
-  }, []);
+    chargerMeteo();
+  }, [chargerMeteo]);
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
@@ -121,8 +143,8 @@ export default function HomeScreen({ navigation }) {
                 style={[styles.meteoBadge, { backgroundColor: theme.accent + '15', borderColor: theme.accent + '28' }]}
                 onPress={() => navigation.navigate('Meteo')}
               >
-                <Text style={{ fontSize: 20 }}>{METEO_PREVIEW.icon}</Text>
-                <Text style={[styles.meteoTemp, { color: theme.accent }]}>{METEO_PREVIEW.temp}°</Text>
+                <Text style={{ fontSize: 20 }}>{meteo.icon}</Text>
+                <Text style={[styles.meteoTemp, { color: theme.accent }]}>{meteo.temp !== null ? `${meteo.temp}°` : '...'}</Text>
               </TouchableOpacity>
               {/* Bouton Paramètres — maintenant fonctionnel */}
               <TouchableOpacity style={styles.settingsBtn} onPress={() => navigation.navigate('Parametres')}>

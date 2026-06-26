@@ -23,7 +23,7 @@ import { AI_PROVIDERS, getActiveAiProvider, getActiveKiraIcon, getAllApiKeys } f
 import { estConnecteAGoogle } from '../utils/googleAuth';
 import { creerEvenementGoogle, supprimerEvenementGoogle } from '../utils/googleCalendar';
 import { analyzeContext } from '../utils/kiraBrain';
-import { detecterCreationEvenement, detecterCreationPlaylist, detecterDemandeActualites, detecterDemandeLectureEnCours, detecterDemandeTraduction, detecterSuppressionEvenement } from '../utils/kiraIntents';
+import { detecterAjoutCourse, detecterAjoutNote, detecterCreationEvenement, detecterCreationPlaylist, detecterDemandeActualites, detecterDemandeLectureEnCours, detecterDemandeTraduction, detecterSuppressionEvenement } from '../utils/kiraIntents';
 import { getActualites } from '../utils/newsCaller';
 import { creerPlaylist, getLectureEnCours } from '../utils/spotifyApi';
 import { estConnecteASpotify } from '../utils/spotifyAuth';
@@ -236,6 +236,38 @@ export default function KiraChatScreen({ navigation }) {
       return;
     }
 
+    // ── Ajout d'un article à la liste de courses ──
+    // Vérifié AVANT la détection de note, car certains messages pourraient
+    // contenir le mot "note" tout en étant une vraie demande de courses
+    // (ex: "note sur ma liste de courses : pain").
+    const articleASupprimer = detecterAjoutCourse(msg);
+    if (articleASupprimer) {
+      const coursesActuelles = (await getData('courses')) || [];
+      const nouvelArticle = { id: Date.now(), n: articleASupprimer, cat: 'Épicerie', q: '1', done: false };
+      await setData('courses', [...coursesActuelles, nouvelArticle]);
+      const reponse = `🛒 C'est noté ! J'ai ajouté "${articleASupprimer}" à ta liste de courses.`;
+      const withReply = [...withUser, { r: 'ai', t: reponse }];
+      await persistChat(withReply);
+      setLoading(false);
+      return;
+    }
+
+    // ── Ajout d'une note rapide ──
+    const texteNote = detecterAjoutNote(msg);
+    if (texteNote) {
+      const notesActuelles = (await getData('notes')) || [];
+      // Le titre de la note est une troncature du début du texte, pour que
+      // la liste de notes reste lisible même si le contenu est long.
+      const titre = texteNote.length > 40 ? `${texteNote.slice(0, 40)}…` : texteNote;
+      const nouvelleNote = { id: Date.now(), t: titre, txt: texteNote, c: PALETTE.violet, source: 'kira' };
+      await setData('notes', [...notesActuelles, nouvelleNote]);
+      const reponse = `📝 C'est noté ! J'ai ajouté ça dans tes notes : "${texteNote}"`;
+      const withReply = [...withUser, { r: 'ai', t: reponse }];
+      await persistChat(withReply);
+      setLoading(false);
+      return;
+    }
+
     // ── 2. Sinon, passe par l'IA générale (ou le mode hors-ligne si rien configuré) ──
     const providerInfo = AI_PROVIDERS.find(p => p.id === providerActif);
     const apiKey = providerActif ? apiKeys[providerActif] : null;
@@ -258,7 +290,7 @@ export default function KiraChatScreen({ navigation }) {
     <KeyboardAvoidingView style={[styles.root, { backgroundColor: theme.bg }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.header, { backgroundColor: theme.accent + '15', borderColor: theme.accent + '30' }]}>
         <View style={styles.avatarWrap}>
-          <KiraIcon size={42} color={theme.accent} iconId={kiraIconActive} emojiSize={20} kiraState={appState.kiraState} />
+          <KiraIcon size={42} color={theme.accent} iconId={kiraIconActive} emojiSize={20} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.kiraName}>Kira</Text>

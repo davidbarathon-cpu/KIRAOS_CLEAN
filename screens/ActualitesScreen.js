@@ -86,7 +86,7 @@ export default function ActualitesScreen({ navigation }) {
         </View>
       )}
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtresRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtresRow} style={styles.filtresScroll}>
         {CATEGORIES.map(cat => (
           <TouchableOpacity
             key={cat}
@@ -105,6 +105,7 @@ export default function ActualitesScreen({ navigation }) {
         </View>
       ) : (
         <ScrollView
+          style={styles.contenuScroll}
           contentContainerStyle={{ padding: 16, paddingBottom: 60 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
         >
@@ -183,7 +184,9 @@ const styles = StyleSheet.create({
   setupBannerText: { fontSize: 10, color: '#aaa', lineHeight: 15 },
   errorBanner: { backgroundColor: 'rgba(255,101,132,0.12)', paddingHorizontal: 16, paddingVertical: 10 },
   errorBannerText: { fontSize: 10, color: PALETTE.pink, lineHeight: 15 },
+  filtresScroll: { flexGrow: 0, flexShrink: 0 },
   filtresRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 6 },
+  contenuScroll: { flex: 1 },
   filtreChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 99, borderWidth: 1 },
   loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
   coachBox: { borderRadius: 12, padding: 13, borderWidth: 1, marginBottom: 14 },

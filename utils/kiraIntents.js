@@ -147,3 +147,87 @@ export function detecterDemandeLectureEnCours(message) {
   const low = message.toLowerCase();
   return ["qu'est-ce que j'écoute", "qu'est ce que j'écoute", 'quel morceau', 'quelle chanson', 'musique en cours', "qu'est-ce qui joue"].some(w => low.includes(w));
 }
+
+// ═══════════════════════════════════════════
+//  COURSES & NOTES — détection d'ajout d'un
+//  article à la liste de courses, ou d'une note
+//  rapide. Volontairement vérifiées AVANT la
+//  détection de rendez-vous (qui utilise aussi le
+//  mot "note") pour éviter qu'une vraie demande de
+//  rendez-vous ("note un rendez-vous dentiste à
+//  15h") ne soit interceptée par erreur ici.
+// ═══════════════════════════════════════════
+
+/**
+ * Détecte une demande d'ajout d'article à la liste de courses, du type :
+ * "ajoute du lait à ma liste de courses" / "ajoute des oeufs aux courses"
+ * "mets du pain dans mes courses" / "note sur ma liste de courses : pain"
+ * Retourne le nom de l'article si détecté, sinon null.
+ */
+export function detecterAjoutCourse(message) {
+  const low = message.toLowerCase();
+  // Le mot "course(s)" doit être présent, sinon "ajoute un rendez-vous" par
+  // exemple ne doit surtout pas tomber ici.
+  if (!low.includes('course')) return null;
+
+  const motsDeclencheurs = ['ajoute', 'ajouter', 'mets', 'mettre', 'rajoute', 'note'];
+  const declencheurTrouve = motsDeclencheurs.find(m => low.includes(m));
+  if (!declencheurTrouve) return null;
+
+  const indexCourse = low.indexOf('course');
+  const indexDeclencheur = low.indexOf(declencheurTrouve);
+
+  // Cas 1 : l'article est mentionné APRÈS "courses" (ex: "note sur ma liste
+  // de courses : pain") → on prend ce qui suit "courses".
+  let segmentApres = message.slice(indexCourse + 'course'.length).replace(/^s?/, '');
+  segmentApres = nettoyerMotsDeLiaison(segmentApres);
+
+  // Cas 2 : l'article est mentionné AVANT "courses" (ex: "ajoute du lait à
+  // ma liste de courses") → on prend ce qui suit le déclencheur, jusqu'à "courses".
+  let segmentAvant = message.slice(indexDeclencheur + declencheurTrouve.length, indexCourse);
+  segmentAvant = nettoyerMotsDeLiaison(segmentAvant);
+
+  // Priorité au segment après "courses" s'il contient quelque chose (cas le
+  // plus explicite, ex: "ma liste de courses : X"), sinon celui d'avant.
+  if (segmentApres) return segmentApres;
+  if (segmentAvant) return segmentAvant;
+  return null;
+}
+
+/**
+ * Retire les petits mots de liaison français (articles, prépositions) d'un
+ * segment de texte, pour isoler le nom de l'article ou le contenu utile.
+ * Utilise des délimiteurs espace explicites plutôt que \b : en JavaScript,
+ * \b ne fonctionne pas correctement avec les caractères accentués comme "à",
+ * ce qui laissait auparavant des résidus du type "lait à" au lieu de "lait".
+ */
+function nettoyerMotsDeLiaison(texte) {
+  let t = ` ${texte.trim()} `;
+  const motsAVirer = ['à', 'a', 'au', 'aux', 'dans', 'sur', 'ma', 'mes', 'la', 'liste', 'de', 'du', 'des', 'le', 'les'];
+  motsAVirer.forEach(mot => {
+    t = t.replace(new RegExp(` ${mot} `, 'gi'), ' ');
+  });
+  return t.replace(/\s+/g, ' ').trim().replace(/^[:\-,]+|[:\-,]+$/g, '').trim();
+}
+
+/**
+ * Détecte une demande d'ajout de note rapide, du type :
+ * "note que j'ai changé mes cordes de guitare" / "Kira, note que..."
+ * "ajoute une note : penser à arroser les tomates"
+ * Retourne le texte de la note si détecté, sinon null.
+ *
+ * IMPORTANT : vérifie d'abord qu'il ne s'agit pas d'une demande de
+ * rendez-vous (qui contient aussi "note" dans certains déclencheurs) ni
+ * d'une demande de courses — l'appelant (KiraChatScreen) doit donc tester
+ * detecterCreationEvenement et detecterAjoutCourse avant cette fonction.
+ */
+export function detecterAjoutNote(message) {
+  const low = message.toLowerCase();
+  const matchNote = low.match(/\bnote\s+que\s+(.+)/) || low.match(/\bajoute\s+une\s+note\s*[:\-]?\s*(.+)/);
+  if (!matchNote) return null;
+
+  const texte = matchNote[1].trim();
+  if (!texte) return null;
+
+  return texte;
+}

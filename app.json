@@ -36,7 +36,8 @@
       "expo-sharing",
       "expo-speech-recognition",
       "expo-quick-actions",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-audio"
     ],
     "android": {
       "permissions": [

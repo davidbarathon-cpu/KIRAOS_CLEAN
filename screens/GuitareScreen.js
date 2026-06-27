@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useAudioPlayer } from 'expo-audio';
 import ExportPdfModal from '../components/ExportPdfModal';
 import { BackButton, Chip, SectionLabel } from '../components/Shared';
 import { enregistrerSession, getProgression, getStatistiquesGlobales } from '../utils/guitareProgression';
@@ -69,10 +70,17 @@ export default function GuitareScreen({ navigation }) {
   const [statsGlobales, setStatsGlobales] = useState(null);
   const debutSessionRef = useRef(null);
   const metroRef = useRef(null);
+  // Le clic du métronome : un seul lecteur, réutilisé à chaque tick via
+  // seekTo(0) + play() — expo-audio ne réinitialise pas automatiquement la
+  // position après la fin de la lecture. On évite volontairement d'utiliser
+  // un second son pour le premier temps de la mesure : sur Android, lancer
+  // play() sur un AudioPlayer met en pause les autres AudioPlayer en cours,
+  // ce qui créerait des coupures audibles avec deux lecteurs simultanés.
+  const clicMetronome = useAudioPlayer(require('../assets/sounds/metronome_clic.wav'));
 
   const series = tab === 'guitare' ? SERIES_GUITARE : SERIES_CHANT;
 
-  // ── Métronome (utilise un simple battement visuel, pas de son natif pour l'instant) ──
+  // ── Métronome avec son réel (expo-audio) ──
   useEffect(() => {
     return () => {
       if (metroRef.current) clearInterval(metroRef.current);
@@ -99,7 +107,8 @@ export default function GuitareScreen({ navigation }) {
     } else {
       debutSessionRef.current = Date.now();
       metroRef.current = setInterval(() => {
-        // Pulsation simple — un vrai son sera ajouté avec expo-av dans une prochaine étape
+        clicMetronome.seekTo(0);
+        clicMetronome.play();
       }, 60000 / bpm);
       setMetroOn(true);
     }
@@ -182,9 +191,6 @@ export default function GuitareScreen({ navigation }) {
                   {metroOn ? '⏹ Arrêter le métronome' : '▶ Lancer le métronome'}
                 </Text>
               </TouchableOpacity>
-              <Text style={styles.metroNote}>
-                ⓘ Le son du métronome sera ajouté avec expo-av dans une prochaine étape.
-              </Text>
             </View>
           )}
         </ScrollView>
@@ -414,5 +420,4 @@ const styles = StyleSheet.create({
   bpmPresets: { flexDirection: 'row', gap: 6, marginBottom: 12 },
   bpmBtn: { flex: 1, paddingVertical: 7, borderRadius: 8, borderWidth: 1, alignItems: 'center' },
   metroBtn: { padding: 12, borderRadius: 11, borderWidth: 1, alignItems: 'center' },
-  metroNote: { fontSize: 10, color: '#444455', marginTop: 8, textAlign: 'center' },
 });

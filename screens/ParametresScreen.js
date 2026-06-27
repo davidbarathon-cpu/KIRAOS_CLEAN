@@ -47,7 +47,6 @@ import {
   reprogrammerQuotidienne,
   verifierPermissionNotifications,
 } from '../utils/notifications';
-import { deconnecterSpotify, estConnecteASpotify, getSpotifyClientId, setSpotifyClientId } from '../utils/spotifyAuth';
 import { getData, resetAllData, setData } from '../utils/storage';
 import { getTheme, PALETTE, THEMES } from '../utils/theme';
 
@@ -68,7 +67,7 @@ const TOUS_MODULES = [
   { id: 'horoscope', icon: '✨', label: 'Horoscope' }, { id: 'notes', icon: '📝', label: 'Notes' },
   { id: 'potager', icon: '🌱', label: 'Potager' }, { id: 'parking', icon: '🅿️', label: 'Parking' },
   { id: 'actualites', icon: '📰', label: 'Actualités' }, { id: 'traduction', icon: '🌍', label: 'Traduction' },
-  { id: 'musique', icon: '🎵', label: 'Musique' }, { id: 'reveil', icon: '⏰', label: 'Réveil' },
+  { id: 'reveil', icon: '⏰', label: 'Réveil' },
   { id: 'domotique', icon: '🏠', label: 'Domotique' },
 ];
 
@@ -92,9 +91,6 @@ export default function ParametresScreen({ navigation }) {
   const [googleClientId, setGoogleClientIdState] = useState('');
   const [googleClientIdSaved, setGoogleClientIdSaved] = useState(false);
   const [googleConnecte, setGoogleConnecte] = useState(false);
-  const [spotifyClientId, setSpotifyClientIdState] = useState('');
-  const [spotifyClientIdSaved, setSpotifyClientIdSaved] = useState(false);
-  const [spotifyConnecte, setSpotifyConnecte] = useState(false);
   const [hueBridgeIp, setHueBridgeIpState] = useState('');
   const [hueConnecte, setHueConnecte] = useState(false);
   const [hueAppairage, setHueAppairage] = useState(false);
@@ -125,8 +121,6 @@ export default function ParametresScreen({ navigation }) {
       setPermissionNotifOk(await verifierPermissionNotifications());
       setGoogleClientIdState((await getGoogleClientId()) || '');
       setGoogleConnecte(await estConnecteAGoogle());
-      setSpotifyClientIdState((await getSpotifyClientId()) || '');
-      setSpotifyConnecte(await estConnecteASpotify());
       const hueConfig = (await getData('hue_config')) || {};
       setHueBridgeIpState(hueConfig.bridgeIp || '');
       setHueConnecte(!!(hueConfig.bridgeIp && hueConfig.username));
@@ -217,19 +211,6 @@ export default function ParametresScreen({ navigation }) {
     Alert.alert('Déconnecter Google Agenda', 'Tu pourras te reconnecter à tout moment.', [
       { text: 'Annuler', style: 'cancel' },
       { text: 'Déconnecter', style: 'destructive', onPress: async () => { await deconnecterGoogle(); setGoogleConnecte(false); } },
-    ]);
-  };
-
-  const sauverSpotifyClientId = async () => {
-    await setSpotifyClientId(spotifyClientId);
-    setSpotifyClientIdSaved(true);
-    setTimeout(() => setSpotifyClientIdSaved(false), 2500);
-  };
-
-  const deconnecterSpotifyDepuisParams = () => {
-    Alert.alert('Déconnecter Spotify', 'Tu pourras te reconnecter à tout moment.', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Déconnecter', style: 'destructive', onPress: async () => { await deconnecterSpotify(); setSpotifyConnecte(false); } },
     ]);
   };
 
@@ -627,55 +608,6 @@ export default function ParametresScreen({ navigation }) {
 
             <TouchableOpacity onPress={() => ouvrirLien('https://console.cloud.google.com/')}>
               <Text style={[styles.lienCreation, { color: accent }]}>🔗 Ouvrir Google Cloud Console →</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* ── Spotify (OAuth — même logique que Google Agenda) ── */}
-          <SectionLabel style={{ marginTop: 18 }}>🎵 Spotify</SectionLabel>
-          <View style={[styles.providerCard, { borderColor: spotifyClientId ? PALETTE.green + '35' : 'rgba(255,255,255,0.07)' }]}>
-            <View style={styles.providerHeader}>
-              <Text style={{ fontSize: 20 }}>🎵</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.providerName}>Spotify Web API</Text>
-                <Text style={styles.providerDesc}>
-                  Nécessite un "Client ID" créé sur le Spotify Developer Dashboard (voir le
-                  guide d'installation pour la procédure complète).
-                </Text>
-              </View>
-              {spotifyConnecte && <Text style={styles.connectedTag}>✓ Connecté</Text>}
-            </View>
-
-            <Text style={[styles.fieldLabel, { marginTop: 10 }]}>Client ID</Text>
-            <TextInput
-              style={styles.keyInput}
-              placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-              placeholderTextColor="#555566"
-              value={spotifyClientId}
-              onChangeText={setSpotifyClientIdState}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <View style={styles.providerActions}>
-              <TouchableOpacity style={[styles.smallBtn, { backgroundColor: accent }]} onPress={sauverSpotifyClientId}>
-                <Text style={styles.smallBtnTextDark}>Enregistrer</Text>
-              </TouchableOpacity>
-              {spotifyConnecte && (
-                <TouchableOpacity style={styles.smallBtnDanger} onPress={deconnecterSpotifyDepuisParams}>
-                  <Text style={styles.smallBtnDangerText}>Déconnecter le compte</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            {spotifyClientIdSaved && <Text style={styles.savedKeyText}>✅ Client ID enregistré !</Text>}
-
-            <Text style={styles.infoSmall}>
-              💡 Une fois le Client ID enregistré ici, connecte ton compte directement depuis
-              le module Musique (bouton "Connecter →" en haut de l'écran). Le contrôle de
-              lecture à distance nécessite un compte Spotify Premium ; la recherche et les
-              playlists fonctionnent avec tout compte.
-            </Text>
-
-            <TouchableOpacity onPress={() => ouvrirLien('https://developer.spotify.com/dashboard')}>
-              <Text style={[styles.lienCreation, { color: accent }]}>🔗 Ouvrir le Spotify Developer Dashboard →</Text>
             </TouchableOpacity>
           </View>
 

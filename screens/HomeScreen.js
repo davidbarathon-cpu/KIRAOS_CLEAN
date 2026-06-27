@@ -48,7 +48,6 @@ const TOUS_MODULES = [
   { id: 'parking',    icon: '🅿️', label: 'Parking',        desc: 'Position voiture',    color: PALETTE.cyan,    screen: 'Parking' },
   { id: 'actualites', icon: '📰', label: 'Actualités',      desc: 'News du jour',        color: '#8B78FF',       screen: 'Actualites' },
   { id: 'traduction', icon: '🌍', label: 'Traduction',      desc: 'Traducteur',          color: PALETTE.teal,    screen: 'Traduction' },
-  { id: 'musique',    icon: '🎵', label: 'Musique',         desc: 'Lecteur & playlists', color: PALETTE.purple,  screen: 'Musique' },
   { id: 'reveil',     icon: '⏰', label: 'Réveil',          desc: 'Mes alarmes',         color: PALETTE.yellow,  screen: 'Reveil' },
   { id: 'domotique',  icon: '🏠', label: 'Domotique',       desc: 'Maison connectée',    color: '#64748B',       screen: 'Domotique' },
 ];

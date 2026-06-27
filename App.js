@@ -17,7 +17,6 @@ import HoroscopeScreen from './screens/HoroscopeScreen';
 import KiraChatScreen from './screens/KiraChatScreen';
 import MeteoScreen from './screens/MeteoScreen';
 import ModulePersonnaliseScreen from './screens/ModulePersonnaliseScreen';
-import MusiqueScreen from './screens/MusiqueScreen';
 import NotesScreen from './screens/NotesScreen';
 import ParametresScreen from './screens/ParametresScreen';
 import ParkingScreen from './screens/ParkingScreen';
@@ -107,7 +106,6 @@ export default function App() {
           <Stack.Screen name="Parking" component={ParkingScreen} />
           <Stack.Screen name="Actualites" component={ActualitesScreen} />
           <Stack.Screen name="Traduction" component={TraductionScreen} />
-          <Stack.Screen name="Musique" component={MusiqueScreen} />
           <Stack.Screen name="Reveil" component={ReveilScreen} />
           <Stack.Screen name="Domotique" component={DomotiqueScreen} />
           <Stack.Screen name="Parametres" component={ParametresScreen} />

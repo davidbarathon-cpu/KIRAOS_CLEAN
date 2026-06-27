@@ -24,10 +24,8 @@ import { AI_PROVIDERS, getActiveAiProvider, getActiveKiraIcon, getAllApiKeys } f
 import { estConnecteAGoogle } from '../utils/googleAuth';
 import { creerEvenementGoogle, supprimerEvenementGoogle } from '../utils/googleCalendar';
 import { analyzeContext } from '../utils/kiraBrain';
-import { detecterAjoutCourse, detecterAjoutNote, detecterCreationEvenement, detecterCreationPlaylist, detecterDemandeActualites, detecterDemandeLectureEnCours, detecterDemandeTraduction, detecterSuppressionEvenement } from '../utils/kiraIntents';
+import { detecterAjoutCourse, detecterAjoutNote, detecterCreationEvenement, detecterDemandeActualites, detecterDemandeTraduction, detecterSuppressionEvenement } from '../utils/kiraIntents';
 import { getActualites } from '../utils/newsCaller';
-import { creerPlaylist, getLectureEnCours } from '../utils/spotifyApi';
-import { estConnecteASpotify } from '../utils/spotifyAuth';
 import { getData, setData } from '../utils/storage';
 import { getTheme, KIRA_STATE_LABELS, PALETTE } from '../utils/theme';
 import { traduireTexte } from '../utils/translationCaller';
@@ -244,43 +242,6 @@ export default function KiraChatScreen({ navigation }) {
           await setData('agenda', agendaActuel.filter(e => e.id !== evenementTrouve.id));
           reponse = `🗑️ "${evenementTrouve.t}" a été supprimé de ton agenda !`;
         }
-      }
-      const withReply = [...withUser, { r: 'ai', t: reponse }];
-      await persistChat(withReply);
-      setLoading(false);
-      return;
-    }
-
-    // ── Création de playlist Spotify ──
-    const nomPlaylist = detecterCreationPlaylist(msg);
-    if (nomPlaylist) {
-      const connecteSpotify = await estConnecteASpotify();
-      let reponse;
-      if (!connecteSpotify) {
-        reponse = `🎵 Je peux créer ça, mais tu n'es pas encore connecté à Spotify.\n\nConnecte ton compte dans le module Musique, puis redemande-moi !`;
-      } else {
-        const { playlist, erreur } = await creerPlaylist(nomPlaylist, 'Créée par Kira sur demande');
-        reponse = erreur
-          ? `⚠️ Je n'ai pas pu créer la playlist "${nomPlaylist}" : ${erreur}`
-          : `🎵 C'est fait ! J'ai créé la playlist "${nomPlaylist}" sur ton compte Spotify. Tu peux y ajouter des morceaux depuis le module Musique. 🌟`;
-      }
-      const withReply = [...withUser, { r: 'ai', t: reponse }];
-      await persistChat(withReply);
-      setLoading(false);
-      return;
-    }
-
-    // ── Consultation du morceau en cours ──
-    if (detecterDemandeLectureEnCours(msg)) {
-      const connecteSpotify = await estConnecteASpotify();
-      let reponse;
-      if (!connecteSpotify) {
-        reponse = `🎵 Connecte ton compte Spotify dans le module Musique pour que je puisse voir ce que tu écoutes !`;
-      } else {
-        const { morceau, erreur } = await getLectureEnCours();
-        if (erreur) reponse = `⚠️ Je n'ai pas pu vérifier : ${erreur}`;
-        else if (!morceau) reponse = `🎵 Rien n'est en cours de lecture sur Spotify en ce moment.`;
-        else reponse = `🎵 Tu écoutes "${morceau.titre}" de ${morceau.artiste} !${morceau.enCours ? '' : ' (en pause)'}`;
       }
       const withReply = [...withUser, { r: 'ai', t: reponse }];
       await persistChat(withReply);

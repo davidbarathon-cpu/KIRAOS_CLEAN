@@ -123,31 +123,6 @@ export function detecterSuppressionEvenement(message) {
 //  lot 12.
 // ═══════════════════════════════════════════
 
-/**
- * Détecte une demande de création de playlist du type :
- * "crée une playlist guitare" / "fais-moi une playlist de motivation"
- * Retourne le nom de la playlist si détecté, sinon null.
- */
-export function detecterCreationPlaylist(message) {
-  const low = message.toLowerCase();
-  const motsDeclencheurs = ['crée une playlist', 'cree une playlist', 'fais-moi une playlist', 'fais moi une playlist', "crée moi une playlist"];
-  const declencheurTrouve = motsDeclencheurs.find(m => low.includes(m));
-  if (!declencheurTrouve) return null;
-
-  let nom = message.slice(low.indexOf(declencheurTrouve) + declencheurTrouve.length).trim();
-  nom = nom.replace(/^(de|sur|pour|avec)\s+/i, '').trim();
-  if (!nom) nom = 'Playlist Kira';
-  return nom;
-}
-
-/**
- * Détecte une demande de consultation du morceau en cours d'écoute.
- */
-export function detecterDemandeLectureEnCours(message) {
-  const low = message.toLowerCase();
-  return ["qu'est-ce que j'écoute", "qu'est ce que j'écoute", 'quel morceau', 'quelle chanson', 'musique en cours', "qu'est-ce qui joue"].some(w => low.includes(w));
-}
-
 // ═══════════════════════════════════════════
 //  COURSES & NOTES — détection d'ajout d'un
 //  article à la liste de courses, ou d'une note

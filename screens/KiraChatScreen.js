@@ -17,6 +17,7 @@ import {
   TextInput, TouchableOpacity,
   View,
 } from 'react-native';
+import * as Speech from 'expo-speech';
 import KiraIcon from '../components/KiraIcon';
 import { demanderAKira } from '../utils/aiCaller';
 import { AI_PROVIDERS, getActiveAiProvider, getActiveKiraIcon, getAllApiKeys } from '../utils/apiKeys';
@@ -50,15 +51,17 @@ export default function KiraChatScreen({ navigation }) {
   const [providerActif, setProviderActif] = useState(null);
   const [kiraIconActive, setKiraIconActive] = useState('etoile');
   const [ecouteVocale, setEcouteVocale] = useState(false);
+  const [voixActivee, setVoixActivee] = useState(true);
+  const [kiraEnTrainDeParler, setKiraEnTrainDeParler] = useState(false);
   const arreterEcouteRef = React.useRef(null);
   const [apiKeys, setApiKeys] = useState({});
   const scrollRef = useRef(null);
 
   const chargerContexte = async () => {
-    const [profil, sante, agenda, courses, notes, chat, provider, keys, iconActif] = await Promise.all([
+    const [profil, sante, agenda, courses, notes, chat, provider, keys, iconActif, prefs] = await Promise.all([
       getData('profil'), getData('sante'), getData('agenda'),
       getData('courses'), getData('notes'), getData('chat'),
-      getActiveAiProvider(), getAllApiKeys(), getActiveKiraIcon(),
+      getActiveAiProvider(), getAllApiKeys(), getActiveKiraIcon(), getData('prefs'),
     ]);
     const heureStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     const kiraState = analyzeContext(agenda || [], sante || {}, heureStr);
@@ -67,14 +70,59 @@ export default function KiraChatScreen({ navigation }) {
     setProviderActif(provider);
     setApiKeys(keys || {});
     setKiraIconActive(iconActif);
+    // Le réglage "Voix de Kira" (Paramètres → Kira) est activé par défaut
+    // tant que l'utilisateur ne l'a pas explicitement désactivé.
+    setVoixActivee(prefs?.voix !== false);
   };
 
   useEffect(() => { chargerContexte(); }, []);
   useFocusEffect(React.useCallback(() => { chargerContexte(); }, []));
 
+  // Coupe immédiatement la voix de Kira si l'utilisateur quitte l'écran
+  // pendant qu'elle parle — sinon la lecture continuerait en arrière-plan.
+  useEffect(() => {
+    return () => { Speech.stop(); };
+  }, []);
+
+  /**
+   * Lit à voix haute la dernière réponse de Kira, si le réglage "Voix de
+   * Kira" est activé. Nettoie le texte des marqueurs markdown (**gras**,
+   * emojis en trop) pour une lecture plus naturelle, et limite la longueur
+   * pour éviter une lecture interminable sur une réponse très détaillée.
+   */
+  const lireReponseKira = texte => {
+    if (!voixActivee) return;
+    const texteNettoye = texte
+      .replace(/\*\*/g, '')
+      .replace(/\n+/g, '. ')
+      .slice(0, 600);
+    if (!texteNettoye.trim()) return;
+
+    Speech.stop();
+    setKiraEnTrainDeParler(true);
+    Speech.speak(texteNettoye, {
+      language: 'fr-FR',
+      onDone: () => setKiraEnTrainDeParler(false),
+      onStopped: () => setKiraEnTrainDeParler(false),
+      onError: () => setKiraEnTrainDeParler(false),
+    });
+  };
+
+  const arreterLaVoix = () => {
+    Speech.stop();
+    setKiraEnTrainDeParler(false);
+  };
+
   const persistChat = async msgs => {
     setMessages(msgs);
     await setData('chat', msgs.slice(-60));
+    // Lit à voix haute uniquement si le dernier message est bien une
+    // réponse de Kira (et non le message de l'utilisateur qui vient
+    // d'être ajouté juste avant l'appel à l'IA).
+    const dernierMessage = msgs[msgs.length - 1];
+    if (dernierMessage?.r === 'ai') {
+      lireReponseKira(dernierMessage.t);
+    }
   };
 
   const toggleEcouteVocale = async () => {
@@ -83,6 +131,10 @@ export default function KiraChatScreen({ navigation }) {
       setEcouteVocale(false);
       return;
     }
+
+    // Coupe la voix de Kira avant d'écouter — sinon le micro risquerait de
+    // capter sa propre réponse en train d'être lue à voix haute.
+    arreterLaVoix();
 
     let permissionOk = await verifierPermissionMicro();
     if (!permissionOk) permissionOk = await demanderPermissionMicro();
@@ -290,12 +342,17 @@ export default function KiraChatScreen({ navigation }) {
     <KeyboardAvoidingView style={[styles.root, { backgroundColor: theme.bg }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.header, { backgroundColor: theme.accent + '15', borderColor: theme.accent + '30' }]}>
         <View style={styles.avatarWrap}>
-          <KiraIcon size={42} color={theme.accent} iconId={kiraIconActive} emojiSize={20} />
+          <KiraIcon size={42} color={theme.accent} iconId={kiraIconActive} emojiSize={20} kiraState={appState.kiraState} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.kiraName}>Kira</Text>
           <Text style={styles.kiraSub}>{statutTxt} · {kLabel}</Text>
         </View>
+        {kiraEnTrainDeParler && (
+          <TouchableOpacity onPress={arreterLaVoix} style={[styles.voixBtn, { backgroundColor: PALETTE.pink + '22' }]}>
+            <Text style={{ fontSize: 13 }}>🔇</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity onPress={() => navigation.navigate('Parametres')} style={styles.configBtn}>
           <Text style={{ fontSize: 13 }}>⚙️</Text>
         </TouchableOpacity>
@@ -405,6 +462,7 @@ const styles = StyleSheet.create({
   kiraName: { fontWeight: '800', color: '#fff', fontSize: 15 },
   kiraSub: { fontSize: 10, color: '#555566', marginTop: 1 },
   configBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },
+  voixBtn: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   closeBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
   setupBanner: { backgroundColor: 'rgba(108,99,255,0.1)', paddingHorizontal: 14, paddingVertical: 10 },
   setupBannerText: { fontSize: 10, color: '#aaa', lineHeight: 15 },

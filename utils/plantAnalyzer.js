@@ -7,45 +7,44 @@
 //  fournisseur n'est configuré, on prévient
 //  clairement l'utilisateur plutôt que d'échouer
 //  silencieusement.
-//
-//  CORRECTIF LOT 32 : la conversion image → base64
-//  utilisait auparavant fetch(uri).blob() puis
-//  FileReader.readAsDataURL(), une technique qui ne
-//  fonctionne plus sur le moteur Hermes utilisé par
-//  Expo SDK 56+ ("Creating blobs from 'ArrayBuffer'
-//  and 'ArrayBufferView' are not supported"). Remplacé
-//  par la nouvelle API expo-file-system (classe File),
-//  stable depuis le SDK 54, qui lit directement le
-//  fichier en base64 sans jamais passer par un Blob.
 // ═══════════════════════════════════════════
-
-import { File } from 'expo-file-system';
 
 const PROVIDERS_COMPATIBLES_IMAGE = ['gemini', 'claude'];
 
-const PROMPT_ANALYSE = `Tu es Kira, assistante jardinage experte. Analyse cette photo de plante et réponds UNIQUEMENT au format JSON suivant, sans aucun texte avant ou après, sans balises markdown :
+const PROMPT_ANALYSE = `Tu es Kira, assistante jardinage experte. Analyse cette photo de plante.
 
-{
-  "type_plante": "nom de la plante identifiée (ou 'Non identifiée' si incertain)",
-  "etat_sante": "Excellent" | "Bon" | "Moyen" | "Préoccupant",
-  "score_sante": nombre entre 0 et 100,
-  "besoin_eau": "Faible" | "Modéré" | "Élevé" | "Urgent",
-  "observations": "2-3 phrases décrivant ce que tu observes (couleur des feuilles, signes de stress, parasites visibles, etc.)",
-  "conseil_principal": "1-2 phrases avec le conseil le plus important et actionnable",
-  "conseils_secondaires": ["conseil court 1", "conseil court 2"]
-}`;
+Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre : pas de texte avant ou après, pas de balises markdown, pas de commentaires.
+
+Voici un EXEMPLE de réponse valide (remplace les valeurs par ta vraie analyse, mais garde exactement cette structure et ce format) :
+
+{"type_plante": "Tomate cerise", "etat_sante": "Bon", "score_sante": 85, "besoin_eau": "Modéré", "observations": "Les feuilles sont vert vif sans signe de stress visible. Quelques taches jaunes sur les feuilles basses, normal a ce stade.", "conseil_principal": "Arrose le sol reste legerement humide, attends encore un jour.", "conseils_secondaires": ["Surveille les feuilles basses", "Apporte de l'engrais dans 2 semaines"]}
+
+Règles STRICTES à respecter pour que ta réponse soit lisible par un programme :
+- "etat_sante" doit valoir EXACTEMENT une seule de ces 4 valeurs : Excellent, Bon, Moyen, Préoccupant
+- "besoin_eau" doit valoir EXACTEMENT une seule de ces 4 valeurs : Faible, Modéré, Élevé, Urgent
+- "score_sante" est un nombre entier entre 0 et 100, sans guillemets autour
+- N'utilise JAMAIS de guillemets doubles (") à l'intérieur des textes de "observations", "conseil_principal" ou des éléments de "conseils_secondaires" — utilise des guillemets simples ou reformule sans guillemets
+- N'ajoute aucune virgule après le dernier élément d'une liste ou d'un objet
+- "conseils_secondaires" contient exactement 2 courtes phrases sous forme de liste`;
 
 /**
  * Convertit une URI locale d'image (fournie par expo-image-picker) en base64,
  * nécessaire pour l'envoyer aux API Gemini/Claude.
- * Utilise la classe File (API moderne expo-file-system, stable depuis le
- * SDK 54) qui lit directement le contenu en base64, sans passer par Blob
- * ni FileReader — ces derniers ne fonctionnent plus de façon fiable sur le
- * moteur Hermes des versions récentes de React Native.
  */
 async function imageUriEnBase64(uri) {
-  const file = new File(uri);
-  return file.base64();
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      // reader.result ressemble à "data:image/jpeg;base64,/9j/4AAQ..."
+      // on ne garde que la partie après la virgule
+      const base64 = reader.result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 async function analyserAvecGemini(imageBase64, apiKey, modele = 'gemini-2.5-flash') {
@@ -116,12 +115,34 @@ async function analyserAvecClaude(imageBase64, apiKey, modele = 'claude-3-5-haik
 /**
  * Extrait le JSON de la réponse texte de l'IA, même si elle a ajouté
  * du texte ou des balises markdown autour (```json ... ```) malgré la consigne.
+ *
+ * MISE À JOUR LOT 35 : ajoute un nettoyage des erreurs de syntaxe les plus
+ * fréquentes que les IA introduisent malgré les consignes (virgules finales
+ * avant une accolade/crochet fermant), et propage le texte brut reçu dans
+ * le message d'erreur en cas d'échec — avant cette mise à jour, l'erreur
+ * "JSON Parse error" ne donnait aucune piste pour comprendre ce qui avait
+ * réellement été reçu de l'IA.
  */
 function extraireJson(texte) {
-  const nettoye = texte.replace(/```json|```/g, '').trim();
+  let nettoye = texte.replace(/```json|```/g, '').trim();
   const matchAccolades = nettoye.match(/\{[\s\S]*\}/);
-  const aTraiter = matchAccolades ? matchAccolades[0] : nettoye;
-  return JSON.parse(aTraiter);
+  let aTraiter = matchAccolades ? matchAccolades[0] : nettoye;
+
+  // Retire les virgules finales avant une accolade ou un crochet fermant
+  // (ex: `"a": 1, }` ou `["x", "y",]`), erreur fréquente des modèles IA
+  // que Hermes (le moteur JS d'Android) refuse plus strictement que d'autres
+  // environnements JavaScript.
+  aTraiter = aTraiter.replace(/,(\s*[}\]])/g, '$1');
+
+  try {
+    return JSON.parse(aTraiter);
+  } catch (e) {
+    // Message enrichi avec un extrait du texte réellement reçu, pour
+    // pouvoir diagnostiquer la prochaine fois si le problème se reproduit
+    // (au lieu d'un message générique impossible à investiguer).
+    const extrait = aTraiter.length > 300 ? `${aTraiter.slice(0, 300)}…` : aTraiter;
+    throw new Error(`${e.message} — réponse reçue de l'IA : ${extrait}`);
+  }
 }
 
 /**

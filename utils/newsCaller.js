@@ -15,6 +15,24 @@ const CATEGORIE_VERS_GNEWS = {
   Environnement: 'science', Culture: 'entertainment',
 };
 
+// MISE À JOUR LOT 35 : mots-clés de secours utilisés en recherche élargie
+// quand l'endpoint "top-headlines" classique ne renvoie aucun article pour
+// une catégorie (cas fréquent avec les quotas gratuits des API, ou simplement
+// peu d'actualité officielle ce jour-là dans cette catégorie précise). Avant
+// cette mise à jour, seule la catégorie Musique bénéficiait de ce mécanisme
+// (elle n'a pas de catégorie officielle dans NewsAPI/GNews) — les autres
+// catégories retombaient silencieusement sur les 4 articles de démonstration
+// fixes sans jamais réessayer, donnant l'impression qu'elles ne se mettaient
+// jamais à jour comparées à Musique.
+const MOTS_CLES_SECOURS = {
+  Tech: 'technologie OR intelligence artificielle OR numérique',
+  Santé: 'santé OR médecine OR bien-être',
+  Sport: 'sport OR football OR compétition',
+  Environnement: 'environnement OR climat OR écologie',
+  Culture: 'culture OR cinéma OR exposition',
+  Musique: 'musique OR guitare OR concert',
+};
+
 const COULEURS_CATEGORIE = {
   Tech: '#6C63FF', Santé: '#FF6584', Sport: '#4FC3F7',
   Musique: '#FF8C32', Environnement: '#43D9AD', Culture: '#F59E0B',
@@ -33,7 +51,7 @@ async function getActualitesNewsApi(categorie, apiKey) {
   if (categorie === 'Tout' || !categorie) {
     url = `https://newsapi.org/v2/top-headlines?country=fr&pageSize=20&apiKey=${apiKey}`;
   } else if (categorie === 'Musique') {
-    url = `https://newsapi.org/v2/everything?q=musique%20OR%20guitare%20OR%20concert&language=fr&sortBy=publishedAt&pageSize=15&apiKey=${apiKey}`;
+    url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(MOTS_CLES_SECOURS.Musique)}&language=fr&sortBy=publishedAt&pageSize=15&apiKey=${apiKey}`;
   } else {
     const cat = CATEGORIE_VERS_NEWSAPI[categorie] || 'general';
     url = `https://newsapi.org/v2/top-headlines?country=fr&category=${cat}&pageSize=15&apiKey=${apiKey}`;
@@ -43,7 +61,7 @@ async function getActualitesNewsApi(categorie, apiKey) {
   if (!res.ok) throw new Error(`NewsAPI ${res.status}`);
   const data = await res.json();
 
-  return (data.articles || [])
+  let articles = (data.articles || [])
     .filter(a => a.title && a.title !== '[Removed]')
     .map((a, i) => ({
       id: `newsapi-${i}`,
@@ -57,6 +75,34 @@ async function getActualitesNewsApi(categorie, apiKey) {
       date: a.publishedAt,
       fournisseur: 'NewsAPI',
     }));
+
+  // Filet de sécurité : si "top-headlines" n'a rien renvoyé pour cette
+  // catégorie précise (quota gratuit limité, ou simplement peu d'actualité
+  // officielle ce jour-là), retente avec une recherche élargie par mots-clés
+  // plutôt que de retomber silencieusement sur les articles de démonstration.
+  if (articles.length === 0 && categorie !== 'Tout' && categorie !== 'Musique' && MOTS_CLES_SECOURS[categorie]) {
+    const urlSecours = `https://newsapi.org/v2/everything?q=${encodeURIComponent(MOTS_CLES_SECOURS[categorie])}&language=fr&sortBy=publishedAt&pageSize=15&apiKey=${apiKey}`;
+    const resSecours = await fetch(urlSecours);
+    if (resSecours.ok) {
+      const dataSecours = await resSecours.json();
+      articles = (dataSecours.articles || [])
+        .filter(a => a.title && a.title !== '[Removed]')
+        .map((a, i) => ({
+          id: `newsapi-secours-${i}`,
+          t: a.title,
+          src: a.source?.name || 'NewsAPI',
+          cat: categorie,
+          c: COULEURS_CATEGORIE[categorie] || '#8B78FF',
+          r: a.description || 'Pas de résumé disponible.',
+          url: a.url,
+          image: a.urlToImage,
+          date: a.publishedAt,
+          fournisseur: 'NewsAPI',
+        }));
+    }
+  }
+
+  return articles;
 }
 
 async function getActualitesGNews(categorie, apiKey) {
@@ -65,7 +111,7 @@ async function getActualitesGNews(categorie, apiKey) {
   if (categorie === 'Tout' || !categorie) {
     url = `https://gnews.io/api/v4/top-headlines?lang=fr&country=fr&max=20&apikey=${apiKey}`;
   } else if (categorie === 'Musique') {
-    url = `https://gnews.io/api/v4/search?q=musique%20OR%20guitare%20OR%20concert&lang=fr&max=15&apikey=${apiKey}`;
+    url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(MOTS_CLES_SECOURS.Musique)}&lang=fr&max=15&apikey=${apiKey}`;
   } else {
     const cat = CATEGORIE_VERS_GNEWS[categorie] || 'general';
     url = `https://gnews.io/api/v4/top-headlines?category=${cat}&lang=fr&country=fr&max=15&apikey=${apiKey}`;
@@ -75,7 +121,7 @@ async function getActualitesGNews(categorie, apiKey) {
   if (!res.ok) throw new Error(`GNews ${res.status}`);
   const data = await res.json();
 
-  return (data.articles || []).map((a, i) => ({
+  let articles = (data.articles || []).map((a, i) => ({
     id: `gnews-${i}`,
     t: a.title,
     src: a.source?.name || 'GNews',
@@ -87,6 +133,30 @@ async function getActualitesGNews(categorie, apiKey) {
     date: a.publishedAt,
     fournisseur: 'GNews',
   }));
+
+  // Même filet de sécurité que pour NewsAPI : recherche élargie si la
+  // catégorie classique n'a rien renvoyé.
+  if (articles.length === 0 && categorie !== 'Tout' && categorie !== 'Musique' && MOTS_CLES_SECOURS[categorie]) {
+    const urlSecours = `https://gnews.io/api/v4/search?q=${encodeURIComponent(MOTS_CLES_SECOURS[categorie])}&lang=fr&max=15&apikey=${apiKey}`;
+    const resSecours = await fetch(urlSecours);
+    if (resSecours.ok) {
+      const dataSecours = await resSecours.json();
+      articles = (dataSecours.articles || []).map((a, i) => ({
+        id: `gnews-secours-${i}`,
+        t: a.title,
+        src: a.source?.name || 'GNews',
+        cat: categorie,
+        c: COULEURS_CATEGORIE[categorie] || '#8B78FF',
+        r: a.description || 'Pas de résumé disponible.',
+        url: a.url,
+        image: a.image,
+        date: a.publishedAt,
+        fournisseur: 'GNews',
+      }));
+    }
+  }
+
+  return articles;
 }
 
 const APPELS_PAR_PROVIDER = {

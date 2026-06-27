@@ -80,6 +80,14 @@ export default function ActualitesScreen({ navigation }) {
           </Text>
         </TouchableOpacity>
       )}
+      {source === 'vide' && (
+        <View style={styles.setupBanner}>
+          <Text style={styles.setupBannerText}>
+            ℹ️ Aucun article récent trouvé pour "{filtre}" auprès de tes fournisseurs — articles
+            de démonstration affichés à la place. Essaie une autre catégorie ou reviens plus tard.
+          </Text>
+        </View>
+      )}
       {erreurs.length > 0 && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>⚠️ {erreurs.join(' · ').slice(0, 100)}</Text>

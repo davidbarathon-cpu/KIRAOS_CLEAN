@@ -118,12 +118,6 @@ export function detecterSuppressionEvenement(message) {
 }
 
 // ═══════════════════════════════════════════
-//  SPOTIFY — détection création de playlist /
-//  consultation du morceau en cours, ajoutée au
-//  lot 12.
-// ═══════════════════════════════════════════
-
-// ═══════════════════════════════════════════
 //  COURSES & NOTES — détection d'ajout d'un
 //  article à la liste de courses, ou d'une note
 //  rapide. Volontairement vérifiées AVANT la
@@ -183,6 +177,45 @@ function nettoyerMotsDeLiaison(texte) {
     t = t.replace(new RegExp(` ${mot} `, 'gi'), ' ');
   });
   return t.replace(/\s+/g, ' ').trim().replace(/^[:\-,]+|[:\-,]+$/g, '').trim();
+}
+
+/**
+ * Détecte une demande de mémorisation longue durée, du type :
+ * "souviens-toi que mon code de garage est 1234"
+ * "Kira, retiens que j'aime le thé au jasmin"
+ * "n'oublie pas que mon anniversaire est le 12 mars"
+ * Retourne le texte à mémoriser si détecté, sinon null.
+ *
+ * IMPORTANT : vérifiée AVANT detecterAjoutNote, car les deux utilisent un
+ * phrasé proche ("souviens-toi que" vs "note que") — on veut que l'une
+ * n'intercepte jamais accidentellement l'autre. Les deux mots déclencheurs
+ * ("souviens"/"retiens"/"oublie") sont volontairement différents de "note"
+ * pour qu'il n'y ait pas d'ambiguïté possible entre les deux fonctionnalités.
+ */
+export function detecterMemorisation(message) {
+  const low = message.toLowerCase();
+  const matchSouviens = low.match(/\bsouviens[\s-]toi\s+que\s+(.+)/)
+    || low.match(/\bretiens\s+que\s+(.+)/)
+    || low.match(/\bn['’]?\s*oublie\s+pas\s+que\s+(.+)/)
+    || low.match(/\bm[ée]morise\s+que\s+(.+)/);
+  if (!matchSouviens) return null;
+
+  const texte = matchSouviens[1].trim();
+  if (!texte) return null;
+
+  return texte;
+}
+
+/**
+ * Détecte une demande de rappel/oubli explicite de la mémoire de Kira, du
+ * type "Kira, oublie tout ce que tu sais sur moi" — distinct du rappel
+ * implicite (qui se fait via une simple recherche par mots-clés dans
+ * kiraMemoire.js, pas une détection d'intention stricte, car les questions
+ * de rappel sont trop variées pour être couvertes par des mots-clés fixes).
+ */
+export function detecterOubliMemoire(message) {
+  const low = message.toLowerCase();
+  return (low.includes('oublie tout') || low.includes('efface ta mémoire') || low.includes('efface ce que tu sais'));
 }
 
 /**

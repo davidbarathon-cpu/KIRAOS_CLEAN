@@ -39,6 +39,7 @@ import {
 } from '../utils/apiKeys';
 import { getCustomModules, supprimerCustomModule } from '../utils/customModules';
 import { apparierAvecBridge } from '../utils/driverPhilipsHue';
+import { getFaitsMemorises, oublierFait, oublierTout } from '../utils/kiraMemoire';
 import { deconnecterGoogle, estConnecteAGoogle, getGoogleClientId, setGoogleClientId } from '../utils/googleAuth';
 import {
   annulerParCle,
@@ -98,6 +99,7 @@ export default function ParametresScreen({ navigation }) {
   const [traductionProviderActif, setTraductionProviderActif] = useState('deepl');
   const [actualitesProvidersActifs, setActualitesProvidersActifsState] = useState(['newsapi']);
   const [kiraIconActive, setKiraIconActiveState] = useState('etoile');
+  const [faitsMemorises, setFaitsMemorises] = useState([]);
 
   // Recharge les modules personnalisés chaque fois que l'écran reprend le
   // focus (ex: retour depuis le constructeur après avoir créé/modifié un
@@ -106,6 +108,13 @@ export default function ParametresScreen({ navigation }) {
     setModulesPersonnalises(await getCustomModules());
   }, []);
   useFocusEffect(useCallback(() => { chargerModulesPersonnalises(); }, [chargerModulesPersonnalises]));
+
+  // Même logique pour la mémoire de Kira : recharge à chaque focus, pour
+  // refléter les faits ajoutés depuis le chat entre deux visites de cet écran.
+  const chargerFaitsMemorises = useCallback(async () => {
+    setFaitsMemorises(await getFaitsMemorises());
+  }, []);
+  useFocusEffect(useCallback(() => { chargerFaitsMemorises(); }, [chargerFaitsMemorises]));
 
   useEffect(() => {
     (async () => {
@@ -212,6 +221,22 @@ export default function ParametresScreen({ navigation }) {
       { text: 'Annuler', style: 'cancel' },
       { text: 'Déconnecter', style: 'destructive', onPress: async () => { await deconnecterGoogle(); setGoogleConnecte(false); } },
     ]);
+  };
+
+  const supprimerFaitMemorise = async id => {
+    await oublierFait(id);
+    chargerFaitsMemorises();
+  };
+
+  const confirmerOubliTotal = () => {
+    Alert.alert(
+      '⚠️ Effacer toute la mémoire de Kira',
+      "Kira oubliera tout ce que tu lui as demandé de retenir. Cette action est irréversible.",
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Tout effacer', style: 'destructive', onPress: async () => { await oublierTout(); chargerFaitsMemorises(); } },
+      ]
+    );
   };
 
   const apparierHue = async () => {
@@ -812,6 +837,31 @@ export default function ParametresScreen({ navigation }) {
               </TouchableOpacity>
             ))}
           </View>
+
+          <SectionLabel style={{ marginTop: 18 }}>🧠 Mémoire de Kira</SectionLabel>
+          <Text style={styles.infoSmall}>
+            Dis-lui par exemple "Kira, souviens-toi que..." dans le chat, et elle s'en souviendra
+            à chaque conversation suivante — même sans IA configurée. Tu gardes le contrôle total
+            de ce qu'elle retient ici.
+          </Text>
+          {faitsMemorises.length === 0 ? (
+            <Text style={styles.infoSmall}>Kira ne retient encore aucune information particulière sur toi.</Text>
+          ) : (
+            faitsMemorises.map(f => (
+              <View key={f.id} style={styles.moduleRow}>
+                <Text style={{ fontSize: 16 }}>🧠</Text>
+                <Text style={[styles.moduleLabel, { fontWeight: '400' }]} numberOfLines={2}>{f.texte}</Text>
+                <TouchableOpacity style={styles.smallBtnDanger} onPress={() => supprimerFaitMemorise(f.id)}>
+                  <Text style={styles.smallBtnDangerText}>Suppr.</Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
+          {faitsMemorises.length > 0 && (
+            <TouchableOpacity style={styles.dangerBtn} onPress={confirmerOubliTotal}>
+              <Text style={[styles.dangerBtnText, { color: PALETTE.pink }]}>🧹 Effacer toute la mémoire de Kira</Text>
+            </TouchableOpacity>
+          )}
 
           <SectionLabel style={{ marginTop: 18 }}>Comportement</SectionLabel>
           {[['Mode proactif (suggestions automatiques)', 'proactif'], ['Voix de Kira (synthèse vocale)', 'voix'], ['Écoute du nom "Kira" (mains libres)', 'micro']].map(([label, key]) => (

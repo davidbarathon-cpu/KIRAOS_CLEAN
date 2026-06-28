@@ -24,7 +24,8 @@ import { AI_PROVIDERS, getActiveAiProvider, getActiveKiraIcon, getAllApiKeys } f
 import { estConnecteAGoogle } from '../utils/googleAuth';
 import { creerEvenementGoogle, supprimerEvenementGoogle } from '../utils/googleCalendar';
 import { analyzeContext } from '../utils/kiraBrain';
-import { detecterAjoutCourse, detecterAjoutNote, detecterCreationEvenement, detecterDemandeActualites, detecterDemandeTraduction, detecterSuppressionEvenement } from '../utils/kiraIntents';
+import { detecterAjoutCourse, detecterAjoutNote, detecterCreationEvenement, detecterDemandeActualites, detecterDemandeTraduction, detecterMemorisation, detecterOubliMemoire, detecterSuppressionEvenement } from '../utils/kiraIntents';
+import { memoriserFait, oublierTout } from '../utils/kiraMemoire';
 import { getActualites } from '../utils/newsCaller';
 import { getData, setData } from '../utils/storage';
 import { getTheme, KIRA_STATE_LABELS, PALETTE } from '../utils/theme';
@@ -249,6 +250,29 @@ export default function KiraChatScreen({ navigation }) {
       return;
     }
 
+    // ── Mémorisation longue durée ──
+    // Vérifiée en première position : déclencheurs explicites et distincts
+    // ("souviens-toi que", "retiens que") qui ne risquent pas d'entrer en
+    // conflit avec les autres détections (courses, notes, rendez-vous...).
+    const faitAMemoriser = detecterMemorisation(msg);
+    if (faitAMemoriser) {
+      await memoriserFait(faitAMemoriser);
+      const reponse = `🧠 C'est noté, je vais m'en souvenir : "${faitAMemoriser}"`;
+      const withReply = [...withUser, { r: 'ai', t: reponse }];
+      await persistChat(withReply);
+      setLoading(false);
+      return;
+    }
+
+    if (detecterOubliMemoire(msg)) {
+      await oublierTout();
+      const reponse = `🧹 C'est fait, j'ai oublié tout ce que tu m'avais demandé de retenir.`;
+      const withReply = [...withUser, { r: 'ai', t: reponse }];
+      await persistChat(withReply);
+      setLoading(false);
+      return;
+    }
+
     // ── Ajout d'un article à la liste de courses ──
     // Vérifié AVANT la détection de note, car certains messages pourraient
     // contenir le mot "note" tout en étant une vraie demande de courses
@@ -286,7 +310,14 @@ export default function KiraChatScreen({ navigation }) {
     const apiKey = providerActif ? apiKeys[providerActif] : null;
     const modele = providerInfo?.modeleParDefaut;
 
-    const { texte, source, erreur } = await demanderAKira(msg, appState, providerActif, apiKey, modele);
+    // Historique de la conversation en cours, limité aux 10 derniers messages
+    // (~5 échanges) pour garder un contexte pertinent sans faire exploser la
+    // taille de chaque appel à l'IA. `withUser` contient déjà le message
+    // qu'on est en train d'envoyer en dernière position — on l'exclut donc
+    // de l'historique transmis séparément, pour ne pas le dupliquer.
+    const historique = withUser.slice(0, -1).slice(-10);
+
+    const { texte, source, erreur } = await demanderAKira(msg, appState, providerActif, apiKey, modele, historique);
 
     const withReply = [...withUser, { r: 'ai', t: texte, source, erreur }];
     await persistChat(withReply);

@@ -1,11 +1,16 @@
 // ═══════════════════════════════════════════
 //  KIRABRAIN.JS — Le cerveau de Kira
-//  MISE À JOUR LOT 5 : Traduction, Musique,
-//  Réveil, Domotique. Tous les modules du
+//  MISE À JOUR LOT 5 : Traduction, Réveil,
+//  Domotique. Tous les modules du
 //  cahier des charges sont maintenant couverts.
+//  MISE À JOUR LOT 37 : Kira peut désormais
+//  répondre à partir de ce qu'on lui a explicitement
+//  demandé de retenir ("souviens-toi que..."), même
+//  en mode hors-ligne (sans IA configurée).
 // ═══════════════════════════════════════════
 
 import { HOROSCOPE_DATA } from '../screens/HoroscopeScreen';
+import { getFaitsMemorises, rechercherFaitsPertinents } from './kiraMemoire';
 
 export function analyzeContext(agenda, sante, heureStr) {
   const h = parseInt(heureStr, 10);
@@ -37,12 +42,30 @@ export const STATE_LABELS = {
   recovery: '🌙 Récupération',
 };
 
-export function getOfflineReply(txt, appState) {
+export async function getOfflineReply(txt, appState) {
   const low = txt.toLowerCase();
   const nom = appState.profil?.prenom || appState.profil?.nom || 'toi';
   const s = appState.sante || {};
   const modeLabel = STATE_LABELS[appState.kiraState] || STATE_LABELS.flow;
   const has = words => words.some(w => low.includes(w));
+
+  // ── Mémoire longue durée (lot 37) ──
+  // Vérifiée en priorité : si la question correspond à un fait que
+  // l'utilisateur a explicitement demandé de retenir, Kira répond avec ce
+  // fait précis plutôt qu'avec une réponse générique. Recherche simple par
+  // mots-clés communs (cohérent avec le reste du système d'intentions de
+  // l'app, volontairement simple plutôt qu'une vraie recherche sémantique).
+  const faitsMemorises = await getFaitsMemorises();
+  if (faitsMemorises.length > 0) {
+    const faitsPertinents = rechercherFaitsPertinents(faitsMemorises, txt);
+    if (faitsPertinents.length > 0) {
+      return [
+        `🧠 Je me souviens, ${nom} !`,
+        '',
+        faitsPertinents.map(f => `• ${f.texte}`).join('\n'),
+      ].join('\n');
+    }
+  }
 
   if (has(['bonjour', 'salut', 'coucou', 'bilan', 'résumé', 'resume', 'journée', 'hello'])) {
     return [
@@ -138,16 +161,6 @@ export function getOfflineReply(txt, appState) {
     ].join('\n');
   }
 
-  if (has(['musique', 'spotify', 'deezer', 'écoute', 'playlist', 'chanson'])) {
-    const ambiances = { rush: 'énergique et rythmée pour rester focus', flow: 'créative pour accompagner ta concentration', recovery: 'calme pour favoriser la récupération' };
-    return [
-      `🎵 Musique, ${nom} !`, '',
-      `En mode ${modeLabel}, je te suggère une ambiance ${ambiances[appState.kiraState] || ambiances.flow}.`,
-      '',
-      'Ouvre le module Musique pour voir mes suggestions de morceaux et connecter Spotify/Deezer !',
-    ].join('\n');
-  }
-
   if (has(['réveil', 'reveil', 'alarme', 'matin'])) {
     return [
       `⏰ Réveil, ${nom} !`, '',
@@ -178,7 +191,7 @@ export function getOfflineReply(txt, appState) {
     '🧘 Bien-être · 🍳 Cuisine · 🛒 Courses',
     '⛅ Météo · ✨ Horoscope · 📝 Notes',
     '🌱 Potager · 🅿️ Parking · 📰 Actualités',
-    '🌍 Traduction · 🎵 Musique · ⏰ Réveil · 🏠 Domotique',
+    '🌍 Traduction · ⏰ Réveil · 🏠 Domotique',
     '',
     'Que puis-je faire pour toi ? 💪',
   ].join('\n');

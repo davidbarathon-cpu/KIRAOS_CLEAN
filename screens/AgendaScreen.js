@@ -261,7 +261,7 @@ export default function AgendaScreen({ navigation }) {
  * encore chargé — on lui passe une config "vide" tant que ce n'est pas prêt.
  */
 function useOAuthRequest(clientId) {
-  const config = clientId ? construireConfigOAuth(clientId) : { clientId: 'placeholder', scopes: [], redirectUri: AuthSession.makeRedirectUri({ scheme: 'kiraos' }) };
+  const config = clientId ? construireConfigOAuth(clientId) : { clientId: 'placeholder', scopes: [], redirectUri: AuthSession.makeRedirectUri({ scheme: 'kiraosclean' }) };
   return AuthSession.useAuthRequest(config, DECOUVERTE_GOOGLE);
 }
 

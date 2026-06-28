@@ -44,7 +44,7 @@ export async function setGoogleClientId(clientId) {
  *   const [request, response, promptAsync] = AuthSession.useAuthRequest(config, DECOUVERTE_GOOGLE);
  */
 export function construireConfigOAuth(clientId) {
-  const redirectUri = AuthSession.makeRedirectUri({ scheme: 'kiraos-clean' });
+  const redirectUri = AuthSession.makeRedirectUri({ scheme: 'kiraosclean' });
   return {
     clientId,
     scopes: SCOPES,

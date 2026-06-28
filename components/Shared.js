@@ -11,6 +11,7 @@ import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 import { getActiveKiraIcon } from '../utils/apiKeys';
 import { PALETTE } from '../utils/theme';
 import KiraIcon from './KiraIcon';
+import PremiumIcon from './PremiumIcon';
 
 // ── Petit libellé de section (style "SLabel" du prototype web) ──
 export function SectionLabel({ children, style }) {
@@ -134,8 +135,8 @@ export function ModuleCard({ icon, label, desc, color, onPress, theme }) {
         { backgroundColor: theme.surface, borderColor: color + '22' },
       ]}
     >
-      <View style={[styles.moduleIconWrap, { backgroundColor: color + '20', borderColor: color + '33' }]}>
-        <Text style={{ fontSize: 18 }}>{icon}</Text>
+      <View style={styles.moduleIconSlot}>
+        <PremiumIcon size={42} color={color} emoji={icon} emojiSize={19} />
       </View>
       <Text style={styles.moduleLabel}>{label}</Text>
       {desc ? <Text style={styles.moduleDesc}>{desc}</Text> : null}
@@ -239,14 +240,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     minHeight: 92,
   },
-  moduleIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  moduleIconSlot: {
     marginBottom: 10,
+    alignSelf: 'flex-start',
   },
   moduleLabel: {
     fontSize: 12,

@@ -70,14 +70,20 @@ export async function programmerNotificationDansSecondes(titre, corps, secondes,
  * Programme une notification quotidienne répétée à une heure précise.
  * Utilisé pour : réveils, résumé matinal, rappels guitare, check-in du soir...
  * heure et minute sont des nombres (ex: 7, 30 pour 07h30)
+ *
+ * CORRECTIF LOT 39 : le SDK actuel d'expo-notifications exige désormais un
+ * champ "type" explicite sur le trigger (breaking change officiel, voir
+ * PR expo/expo#31598) — l'ancien format { hour, minute, repeats: true }
+ * sans ce champ est désormais ambigu et provoque un déclenchement
+ * silencieusement défaillant sur Android (notification jamais sonnée).
  */
 export async function programmerNotificationQuotidienne(titre, corps, heure, minute, donnees = {}) {
   return Notifications.scheduleNotificationAsync({
     content: { title: titre, body: corps, data: donnees, sound: true },
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
       hour: heure,
       minute: minute,
-      repeats: true,
       channelId: 'kira-defaut',
     },
   });
@@ -89,6 +95,10 @@ export async function programmerNotificationQuotidienne(titre, corps, heure, min
  * dans le module Réveil. expo-notifications ne supporte pas nativement les
  * "jours sélectionnés" en une seule règle — on programme donc une notif
  * répétée par jour actif, avec un identifiant qui les regroupe.
+ *
+ * CORRECTIF LOT 39 : même correction que programmerNotificationQuotidienne
+ * — champ "type" explicite désormais requis par le SDK (PR expo/expo#31598),
+ * sinon le déclenchement à l'heure prévue échoue silencieusement sur Android.
  */
 export async function programmerAlarmeJoursSemaine(titre, corps, heure, minute, joursActifs, donnees = {}) {
   // weekday: 1 = Dimanche, 2 = Lundi, ... 7 = Samedi (convention expo-notifications/iOS)
@@ -101,10 +111,10 @@ export async function programmerAlarmeJoursSemaine(titre, corps, heure, minute, 
     const id = await Notifications.scheduleNotificationAsync({
       content: { title: titre, body: corps, data: donnees, sound: true },
       trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
         weekday: mappingWeekday[i],
         hour: heure,
         minute: minute,
-        repeats: true,
         channelId: 'kira-defaut',
       },
     });

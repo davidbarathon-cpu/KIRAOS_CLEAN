@@ -25,6 +25,7 @@ const CATEGORIE_VERS_GNEWS = {
 // fixes sans jamais réessayer, donnant l'impression qu'elles ne se mettaient
 // jamais à jour comparées à Musique.
 const MOTS_CLES_SECOURS = {
+  Tout: 'actualité OR France OR monde OR politique',
   Tech: 'technologie OR intelligence artificielle OR numérique',
   Santé: 'santé OR médecine OR bien-être',
   Sport: 'sport OR football OR compétition',
@@ -80,8 +81,8 @@ async function getActualitesNewsApi(categorie, apiKey) {
   // catégorie précise (quota gratuit limité, ou simplement peu d'actualité
   // officielle ce jour-là), retente avec une recherche élargie par mots-clés
   // plutôt que de retomber silencieusement sur les articles de démonstration.
-  if (articles.length === 0 && categorie !== 'Tout' && categorie !== 'Musique' && MOTS_CLES_SECOURS[categorie]) {
-    const urlSecours = `https://newsapi.org/v2/everything?q=${encodeURIComponent(MOTS_CLES_SECOURS[categorie])}&language=fr&sortBy=publishedAt&pageSize=15&apiKey=${apiKey}`;
+  if (articles.length === 0 && MOTS_CLES_SECOURS[categorie || "Tout"]) {
+    const urlSecours = `https://newsapi.org/v2/everything?q=${encodeURIComponent(MOTS_CLES_SECOURS[categorie || 'Tout'])}&language=fr&sortBy=publishedAt&pageSize=15&apiKey=${apiKey}`;
     const resSecours = await fetch(urlSecours);
     if (resSecours.ok) {
       const dataSecours = await resSecours.json();
@@ -136,8 +137,8 @@ async function getActualitesGNews(categorie, apiKey) {
 
   // Même filet de sécurité que pour NewsAPI : recherche élargie si la
   // catégorie classique n'a rien renvoyé.
-  if (articles.length === 0 && categorie !== 'Tout' && categorie !== 'Musique' && MOTS_CLES_SECOURS[categorie]) {
-    const urlSecours = `https://gnews.io/api/v4/search?q=${encodeURIComponent(MOTS_CLES_SECOURS[categorie])}&lang=fr&max=15&apikey=${apiKey}`;
+  if (articles.length === 0 && MOTS_CLES_SECOURS[categorie || "Tout"]) {
+    const urlSecours = `https://gnews.io/api/v4/search?q=${encodeURIComponent(MOTS_CLES_SECOURS[categorie || 'Tout'])}&lang=fr&max=15&apikey=${apiKey}`;
     const resSecours = await fetch(urlSecours);
     if (resSecours.ok) {
       const dataSecours = await resSecours.json();

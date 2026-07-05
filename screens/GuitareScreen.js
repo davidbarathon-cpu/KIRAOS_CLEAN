@@ -80,10 +80,25 @@ export default function GuitareScreen({ navigation }) {
 
   const series = tab === 'guitare' ? SERIES_GUITARE : SERIES_CHANT;
 
+  /**
+   * Arrête le scheduler du métronome, quelle que soit la façon dont il a
+   * été démarré (setTimeout récursif — voir demarrerMetroPrecis). Centralisé
+   * ici pour que les 4 endroits qui doivent arrêter le métronome (bouton
+   * stop, changement d'exercice, retour en arrière, démontage du composant)
+   * utilisent tous le même point d'arrêt fiable. Déclarée avant le premier
+   * useEffect ci-dessous, qui en a besoin dans sa fonction de nettoyage.
+   */
+  const arreterMetro = () => {
+    if (metroRef.current) {
+      clearTimeout(metroRef.current);
+      metroRef.current = null;
+    }
+  };
+
   // ── Métronome avec son réel (expo-audio) ──
   useEffect(() => {
     return () => {
-      if (metroRef.current) clearInterval(metroRef.current);
+      arreterMetro();
     };
   }, []);
 
@@ -99,17 +114,48 @@ export default function GuitareScreen({ navigation }) {
     setStatsGlobales(stats);
   };
 
+  /**
+   * CORRECTIF LOT 39 : remplace setInterval par un scheduler auto-correctif.
+   * setInterval accumule une dérive à chaque tick (le thread JS de React
+   * Native peut être ponctuellement retardé par le rendu UI, le garbage
+   * collector, etc.) — c'est documenté comme un défaut connu et explique
+   * exactement le symptôme observé ("le métronome accélère puis ralentit").
+   *
+   * La technique ici calcule le temps réel écoulé depuis le DÉBUT du
+   * métronome (pas depuis le tick précédent), et programme chaque
+   * setTimeout suivant pour viser le bon instant théorique, en compensant
+   * activement tout retard accumulé plutôt que de le laisser s'additionner.
+   */
+  const demarrerMetroPrecis = bpmCible => {
+    const intervalleMs = 60000 / bpmCible;
+    const debut = Date.now();
+    let tick = 0;
+
+    const jouerEtReprogrammer = () => {
+      clicMetronome.seekTo(0);
+      clicMetronome.play();
+      tick += 1;
+
+      // Calcule quand le PROCHAIN tick théorique devrait se produire par
+      // rapport au début (pas par rapport à "maintenant"), pour ne jamais
+      // accumuler de dérive sur la durée d'une session.
+      const prochainTickTheorique = debut + tick * intervalleMs;
+      const delaiCorrige = Math.max(0, prochainTickTheorique - Date.now());
+
+      metroRef.current = setTimeout(jouerEtReprogrammer, delaiCorrige);
+    };
+
+    metroRef.current = setTimeout(jouerEtReprogrammer, intervalleMs);
+  };
+
   const toggleMetro = () => {
     if (metroOn) {
-      clearInterval(metroRef.current);
+      arreterMetro();
       setMetroOn(false);
       enregistrerSiSessionValide();
     } else {
       debutSessionRef.current = Date.now();
-      metroRef.current = setInterval(() => {
-        clicMetronome.seekTo(0);
-        clicMetronome.play();
-      }, 60000 / bpm);
+      demarrerMetroPrecis(bpm);
       setMetroOn(true);
     }
   };
@@ -136,7 +182,7 @@ export default function GuitareScreen({ navigation }) {
     setSerieIdx(null);
     setExoIdx(null);
     setMetroOn(false);
-    clearInterval(metroRef.current);
+    arreterMetro();
   };
 
   // ── Vue détail d'un exercice ──
@@ -146,7 +192,7 @@ export default function GuitareScreen({ navigation }) {
     return (
       <View style={[styles.root, { backgroundColor: theme.bg }]}>
         <View style={[styles.header, { borderColor: theme.border }]}>
-          <BackButton onPress={() => { if (metroOn) { clearInterval(metroRef.current); setMetroOn(false); enregistrerSiSessionValide(); } setExoIdx(null); }} />
+          <BackButton onPress={() => { if (metroOn) { arreterMetro(); setMetroOn(false); enregistrerSiSessionValide(); } setExoIdx(null); }} />
           <Text style={styles.headerTitle} numberOfLines={1}>{e.n}</Text>
         </View>
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>

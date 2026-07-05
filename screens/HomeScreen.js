@@ -102,7 +102,12 @@ export default function HomeScreen({ navigation }) {
     chargerMeteo();
   }, [chargerMeteo]);
 
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+  // CORRECTIF LOT 39 : resynchronise l'horloge à chaque retour sur cet
+  // écran, pas seulement via le setInterval de 30s — sans ça, après un
+  // passage en arrière-plan prolongé (les setInterval sont suspendus par
+  // Android pendant ce temps), l'horloge affichait l'heure figée du moment
+  // où l'app avait été quittée, jusqu'à la prochaine bascule du minuteur.
+  useFocusEffect(useCallback(() => { loadData(); setNow(new Date()); }, [loadData]));
 
   useEffect(() => {
     const iv = setInterval(() => setNow(new Date()), 30000);

@@ -7,7 +7,20 @@
 //  fournisseur n'est configuré, on prévient
 //  clairement l'utilisateur plutôt que d'échouer
 //  silencieusement.
+//
+//  CORRECTIF LOT 39 (ré-appliqué — absent du test du
+//  28/06 malgré une livraison précédente identique) :
+//  la conversion image → base64 utilisait fetch(uri)
+//  .blob() puis FileReader.readAsDataURL(), qui ne
+//  fonctionne plus sur le moteur Hermes utilisé par
+//  Expo SDK 56+ ("Creating blobs from 'ArrayBuffer'
+//  and 'ArrayBufferView' are not supported"). Remplacé
+//  par la classe File d'expo-file-system (stable
+//  depuis le SDK 54), qui lit directement le fichier
+//  en base64 sans jamais passer par un Blob.
 // ═══════════════════════════════════════════
+
+import { File } from 'expo-file-system';
 
 const PROVIDERS_COMPATIBLES_IMAGE = ['gemini', 'claude'];
 
@@ -30,21 +43,14 @@ Règles STRICTES à respecter pour que ta réponse soit lisible par un programme
 /**
  * Convertit une URI locale d'image (fournie par expo-image-picker) en base64,
  * nécessaire pour l'envoyer aux API Gemini/Claude.
+ * Utilise la classe File (API moderne expo-file-system, stable depuis le
+ * SDK 54) qui lit directement le contenu en base64, sans passer par Blob
+ * ni FileReader — ces derniers ne fonctionnent plus de façon fiable sur le
+ * moteur Hermes des versions récentes de React Native.
  */
 async function imageUriEnBase64(uri) {
-  const response = await fetch(uri);
-  const blob = await response.blob();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      // reader.result ressemble à "data:image/jpeg;base64,/9j/4AAQ..."
-      // on ne garde que la partie après la virgule
-      const base64 = reader.result.split(',')[1];
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+  const file = new File(uri);
+  return file.base64();
 }
 
 async function analyserAvecGemini(imageBase64, apiKey, modele = 'gemini-2.5-flash') {

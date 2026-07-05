@@ -1,160 +1,131 @@
-// ═══════════════════════════════════════════
-//  CUISINESCREEN.JS — Module Cuisine
-//  Recettes quotidiennes, détails, conseils Kira
-// ═══════════════════════════════════════════
-
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { BackButton, Chip, SectionLabel } from '../components/Shared';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { BackButton, SectionLabel } from '../components/Shared';
+import { getRecettesDuJour } from '../utils/cuisineCaller';
+import { getAllApiKeys, getActiveAiProvider, AI_PROVIDERS } from '../utils/apiKeys';
+import { getData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
-
-const RECETTES = [
-  {
-    id: 1,
-    n: 'Poulet rôti citron & thym',
-    i: '🍋',
-    d: '45min',
-    cal: 420,
-    diff: 'Facile',
-    c: PALETTE.orange,
-    ing: ['1 poulet', '2 citrons', 'Thym frais', "Ail, huile d'olive"],
-    etapes: [
-      'Préchauffer le four à 200°C',
-      "Badigeonner le poulet de jus de citron et d'huile",
-      "Parsemer de thym et d'ail émincé",
-      'Rôtir 45 min en arrosant toutes les 15 min',
-      'Laisser reposer 10 min avant de découper',
-    ],
-    conseil: 'Arroser régulièrement pour une peau croustillante.',
-  },
-  {
-    id: 2,
-    n: 'Buddha bowl avocat-quinoa',
-    i: '🥑',
-    d: '20min',
-    cal: 380,
-    diff: 'Très facile',
-    c: PALETTE.teal,
-    ing: ['100g quinoa', '1 avocat mûr', 'Tomates cerises', 'Tahini, citron'],
-    etapes: [
-      "Cuire le quinoa 12 min dans 2x son volume d'eau",
-      "Couper l'avocat et les tomates",
-      'Disposer en bol sur le quinoa',
-      'Arroser de tahini dilué au citron',
-    ],
-    conseil: 'Préparez le quinoa la veille pour gagner du temps.',
-  },
-  {
-    id: 3,
-    n: 'Soupe miso & tofu',
-    i: '🍜',
-    d: '15min',
-    cal: 180,
-    diff: 'Facile',
-    c: PALETTE.blue,
-    ing: ['1L bouillon dashi', '3cs miso blanc', '200g tofu soyeux', 'Algues wakamé, ciboulette'],
-    etapes: [
-      'Chauffer le bouillon sans faire bouillir',
-      "Délayer le miso dans une louche de bouillon",
-      'Incorporer doucement, ajouter le tofu en dés',
-      'Parsemer de ciboulette et wakamé réhydratée',
-    ],
-    conseil: 'Ne jamais faire bouillir le miso — cela détruit les probiotiques.',
-  },
-];
 
 export default function CuisineScreen({ navigation }) {
   const theme = getTheme('cosmos');
+  const [recettes, setRecettes] = useState([]);
   const [recipeIdx, setRecipeIdx] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [sourceIA, setSourceIA] = useState(null);
 
-  // ── Vue détail recette ──
+  const charger = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [sante, agenda, profil, keys, provider] = await Promise.all([
+        getData('sante'), getData('agenda'), getData('profil'),
+        getAllApiKeys(), getActiveAiProvider(),
+      ]);
+      const appState = { sante: sante || {}, agenda: agenda || [], profil: profil || {}, kiraState: 'flow' };
+      const { recettes: r, source } = await getRecettesDuJour(appState, provider, keys || {});
+      setRecettes(r || []);
+      setSourceIA(source);
+    } catch (e) {
+      console.warn('Erreur chargement recettes:', e);
+    }
+    setLoading(false);
+  }, []);
+
+  useFocusEffect(useCallback(() => { charger(); }, [charger]));
+
+  if (loading) {
+    return (
+      <View style={[styles.root, { backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator color={theme.accent} size="large" />
+        <Text style={{ color: '#666677', marginTop: 12, fontSize: 12 }}>
+          Kira prépare tes recettes du jour...
+        </Text>
+      </View>
+    );
+  }
+
   if (recipeIdx !== null) {
-    const r = RECETTES[recipeIdx];
+    const r = recettes[recipeIdx];
+    if (!r) { setRecipeIdx(null); return null; }
     return (
       <View style={[styles.root, { backgroundColor: theme.bg }]}>
         <View style={[styles.header, { borderColor: theme.border }]}>
           <BackButton onPress={() => setRecipeIdx(null)} />
-          <Text style={styles.headerTitle} numberOfLines={1}>{r.n}</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>{r.titre}</Text>
         </View>
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>
-          <Text style={styles.recipeEmoji}>{r.i}</Text>
-          <View style={styles.chipsRow}>
-            <Chip label={r.diff} color={PALETTE.orange} />
-            <Chip label={r.d} color={PALETTE.blue} />
-            <Chip label={`${r.cal} kcal`} color={PALETTE.pink} />
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+          <View style={styles.metaRow}>
+            <View style={[styles.metaChip, { backgroundColor: PALETTE.teal + '22' }]}>
+              <Text style={{ color: PALETTE.teal, fontSize: 11 }}>⏱ {r.temps}</Text>
+            </View>
+            <View style={[styles.metaChip, { backgroundColor: PALETTE.purple + '22' }]}>
+              <Text style={{ color: PALETTE.purple, fontSize: 11 }}>📊 {r.difficulte}</Text>
+            </View>
           </View>
 
-          <View style={styles.sectionBox}>
-            <SectionLabel>Ingrédients</SectionLabel>
-            {r.ing.map((item, i) => (
-              <Text key={i} style={styles.ingredientText}>• {item}</Text>
-            ))}
-          </View>
+          <SectionLabel>Ingrédients</SectionLabel>
+          {(r.ingredients || []).map((ing, i) => (
+            <View key={i} style={styles.ingRow}>
+              <Text style={{ color: PALETTE.teal, marginRight: 8 }}>•</Text>
+              <Text style={styles.ingText}>{ing}</Text>
+            </View>
+          ))}
 
-          <View style={styles.sectionBox}>
-            <SectionLabel>Préparation</SectionLabel>
-            {r.etapes.map((e, i) => (
-              <View key={i} style={styles.etapeRow}>
-                <View style={[styles.etapeNum, { borderColor: r.c, backgroundColor: r.c + '33' }]}>
-                  <Text style={{ color: r.c, fontSize: 11, fontWeight: '800' }}>{i + 1}</Text>
-                </View>
-                <Text style={styles.etapeText}>{e}</Text>
+          <SectionLabel style={{ marginTop: 16 }}>Préparation</SectionLabel>
+          {(r.etapes || []).map((etape, i) => (
+            <View key={i} style={styles.etapeRow}>
+              <View style={[styles.etapeNum, { backgroundColor: theme.accent }]}>
+                <Text style={{ color: '#000', fontSize: 11, fontWeight: '700' }}>{i + 1}</Text>
               </View>
-            ))}
-          </View>
+              <Text style={styles.etapeText}>{etape}</Text>
+            </View>
+          ))}
 
-          <View style={[styles.coachBox, { backgroundColor: r.c + '12', borderColor: r.c + '33' }]}>
-            <Text style={[styles.coachLabel, { color: r.c }]}>🌟 Kira conseille</Text>
-            <Text style={styles.coachText}>{r.conseil}</Text>
-          </View>
+          {r.conseil && (
+            <View style={[styles.conseilBox, { borderColor: theme.accent + '44' }]}>
+              <Text style={{ fontSize: 14, marginBottom: 6 }}>🌟</Text>
+              <Text style={{ color: theme.accent, fontSize: 12, fontWeight: '600', marginBottom: 4 }}>Conseil de Kira</Text>
+              <Text style={{ color: '#aaa', fontSize: 12, lineHeight: 18 }}>{r.conseil}</Text>
+            </View>
+          )}
         </ScrollView>
       </View>
     );
   }
 
-  // ── Vue liste recettes ──
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
       <View style={[styles.header, { borderColor: theme.border }]}>
         <BackButton onPress={() => navigation.goBack()} />
-        <Text style={styles.headerTitle}>🍳 Cuisine</Text>
+        <Text style={styles.headerTitle}>🍽 Cuisine du jour</Text>
       </View>
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>
-        <View style={[styles.suggestBox, { borderColor: PALETTE.orange + '40' }]}>
-          <Text style={[styles.suggestLabel, { color: PALETTE.orange }]}>🌟 Kira suggère ce soir :</Text>
-          <Text style={styles.suggestText}>
-            Poulet rôti citron & thym — léger, protéiné, parfait après une course. 420 kcal,
-            dans ton budget !
-          </Text>
-        </View>
-
-        {RECETTES.map((r, i) => (
-          <TouchableOpacity
-            key={r.id}
-            style={[styles.recipeCard, { borderColor: r.c + '22' }]}
-            onPress={() => setRecipeIdx(i)}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.recipeIcon, { backgroundColor: r.c + '20' }]}>
-              <Text style={{ fontSize: 24 }}>{r.i}</Text>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        {sourceIA === 'ia' && (
+          <View style={[styles.iaBadge, { borderColor: theme.accent + '44' }]}>
+            <Text style={{ color: theme.accent, fontSize: 11 }}>✨ Recettes générées par Kira aujourd'hui</Text>
+          </View>
+        )}
+        {sourceIA === 'offline' && (
+          <View style={[styles.iaBadge, { borderColor: PALETTE.gray + '44' }]}>
+            <Text style={{ color: PALETTE.gray, fontSize: 11 }}>💡 Recettes de la bibliothèque — configure une IA pour des recettes fraîches chaque jour</Text>
+          </View>
+        )}
+        {recettes.map((r, i) => (
+          <TouchableOpacity key={i} style={[styles.recetteCard, { borderColor: theme.accent + '22' }]} onPress={() => setRecipeIdx(i)}>
+            <View style={styles.recetteHeader}>
+              <Text style={styles.recetteTitre}>{r.titre}</Text>
+              <Text style={{ color: '#666', fontSize: 10 }}>→</Text>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.recipeName}>{r.n}</Text>
-              <View style={styles.chipsRowSmall}>
-                <Chip label={r.d} color={PALETTE.blue} />
-                <Chip label={r.diff} color={PALETTE.orange} />
-              </View>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={[styles.recipeCal, { color: r.c }]}>{r.cal}</Text>
-              <Text style={styles.recipeCalUnit}>kcal</Text>
+            <View style={styles.recetteMeta}>
+              <Text style={[styles.metaTag, { color: PALETTE.teal }]}>⏱ {r.temps}</Text>
+              <Text style={[styles.metaTag, { color: PALETTE.purple }]}>📊 {r.difficulte}</Text>
+              <Text style={[styles.metaTag, { color: PALETTE.orange }]}>🥘 {(r.ingredients || []).length} ingr.</Text>
             </View>
           </TouchableOpacity>
         ))}
-
-        <Text style={styles.comingSoon}>
-          🚧 De nouvelles recettes seront ajoutées chaque jour automatiquement par Kira.
-        </Text>
+        <TouchableOpacity style={[styles.refreshBtn, { borderColor: theme.accent + '44' }]} onPress={charger}>
+          <Text style={{ color: theme.accent, fontSize: 12 }}>🔄 Nouvelles recettes</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -162,50 +133,21 @@ export default function CuisineScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingTop: 50,
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-  },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 50, paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: 1 },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#fff', flex: 1 },
-  recipeEmoji: { fontSize: 56, textAlign: 'center', marginBottom: 16 },
-  chipsRow: { flexDirection: 'row', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 18 },
-  chipsRowSmall: { flexDirection: 'row', gap: 6, marginTop: 5 },
-  sectionBox: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
-  ingredientText: { fontSize: 13, color: '#ccc', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' },
-  etapeRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
-  etapeNum: { width: 24, height: 24, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  etapeText: { fontSize: 13, color: '#ccc', lineHeight: 19, flex: 1, paddingTop: 3 },
-  coachBox: { borderRadius: 12, padding: 13, borderWidth: 1 },
-  coachLabel: { fontSize: 11, fontWeight: '600', marginBottom: 4 },
-  coachText: { fontSize: 12, color: '#ccc' },
-  suggestBox: { backgroundColor: 'rgba(249,115,22,0.08)', borderRadius: 14, padding: 13, borderWidth: 1, marginBottom: 14 },
-  suggestLabel: { fontSize: 11, fontWeight: '600', marginBottom: 5 },
-  suggestText: { fontSize: 13, color: '#fff' },
-  recipeCard: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 14,
-    padding: 13,
-    marginBottom: 9,
-    borderWidth: 1,
-  },
-  recipeIcon: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  recipeName: { fontWeight: '600', color: '#fff', fontSize: 13 },
-  recipeCal: { fontSize: 15, fontWeight: '800' },
-  recipeCalUnit: { fontSize: 10, color: '#444455' },
-  comingSoon: { fontSize: 11, color: '#333344', textAlign: 'center', marginTop: 10, lineHeight: 16 },
+  metaRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  metaChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 99 },
+  ingRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 },
+  ingText: { color: '#ccc', fontSize: 13, flex: 1, lineHeight: 19 },
+  etapeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 },
+  etapeNum: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 },
+  etapeText: { color: '#ccc', fontSize: 13, flex: 1, lineHeight: 20 },
+  conseilBox: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: 14, borderWidth: 1, marginTop: 16 },
+  iaBadge: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: 10, borderWidth: 1, marginBottom: 14 },
+  recetteCard: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 14, padding: 14, borderWidth: 1, marginBottom: 10 },
+  recetteHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  recetteTitre: { color: '#fff', fontSize: 14, fontWeight: '700', flex: 1 },
+  recetteMeta: { flexDirection: 'row', gap: 12 },
+  metaTag: { fontSize: 11 },
+  refreshBtn: { marginTop: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center' },
 });

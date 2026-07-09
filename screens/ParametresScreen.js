@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert, Linking,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,6 +20,7 @@ import {
 } from 'react-native';
 import KiraIcon from '../components/KiraIcon';
 import { BackButton, SectionLabel, Toggle } from '../components/Shared';
+import { refreshKiraWidget } from '../utils/widgetUpdater';
 import {
   ACTUALITES_PROVIDERS,
   AI_PROVIDERS,
@@ -81,6 +83,7 @@ export default function ParametresScreen({ navigation }) {
   const [modulesActifs, setModulesActifs] = useState([]);
   const [modulesPersonnalises, setModulesPersonnalises] = useState([]);
   const [saved, setSaved] = useState(false);
+  const [widgetMsg, setWidgetMsg] = useState(null);
 
   // ── État spécifique à la section API ──
   const [apiKeys, setApiKeysState] = useState({});
@@ -383,6 +386,38 @@ export default function ParametresScreen({ navigation }) {
               <Toggle value={prefs[key] !== false} onChange={v => updatePref(key, v)} color={accent} />
             </View>
           ))}
+
+          {Platform.OS === 'android' && (
+            <View style={{ marginTop: 20 }}>
+              <SectionLabel>🖼️ Widget écran d'accueil</SectionLabel>
+              <View style={[styles.securityBox, { borderColor: accent + '20', backgroundColor: accent + '10' }]}>
+                <Text style={styles.securityTitle}>Kira OS — Maxi</Text>
+                <Text style={styles.securityText}>
+                  Pour l'ajouter : appuie longuement sur ton écran d'accueil Android → "Widgets"
+                  → cherche "Kira OS" → fais glisser "Kira OS — Maxi" sur ton écran. Tu pourras
+                  ensuite le redimensionner en tirant sur ses coins.{'\n\n'}
+                  Android ne le limite pas à une petite case : à sa taille par défaut, il occupe
+                  déjà une bonne partie voire la totalité d'une page d'accueil sur la plupart des
+                  lanceurs — le plus proche d'un widget "plein écran" que le système permette.
+                  {'\n\n'}
+                  Il se met à jour tout seul (météo, agenda, forme du jour) à chaque fois que tu
+                  ouvres Kira OS, et au minimum toutes les 30 minutes en arrière-plan. Le bouton
+                  ci-dessous force une actualisation immédiate si besoin.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.saveBtn, { backgroundColor: accent, marginTop: 10 }]}
+                onPress={async () => {
+                  await refreshKiraWidget();
+                  setWidgetMsg('✅ Widget actualisé !');
+                  setTimeout(() => setWidgetMsg(null), 2500);
+                }}
+              >
+                <Text style={styles.saveBtnText}>🔄 Actualiser le widget maintenant</Text>
+              </TouchableOpacity>
+              {widgetMsg && <Text style={styles.savedText}>{widgetMsg}</Text>}
+            </View>
+          )}
         </View>
       );
     }

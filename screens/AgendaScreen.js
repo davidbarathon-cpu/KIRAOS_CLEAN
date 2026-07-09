@@ -31,6 +31,7 @@ import {
 } from '../utils/googleAuth';
 import { creerEvenementGoogle, listerEvenementsGoogle, supprimerEvenementGoogle } from '../utils/googleCalendar';
 import { getData, setData } from '../utils/storage';
+import { refreshKiraWidget } from '../utils/widgetUpdater';
 import { getTheme, PALETTE } from '../utils/theme';
 
 const COLORS = [PALETTE.purple, PALETTE.pink, PALETTE.teal, PALETTE.orange, PALETTE.blue, PALETTE.magenta];
@@ -126,6 +127,7 @@ export default function AgendaScreen({ navigation }) {
   const persist = async list => {
     setEvents(list);
     await setData('agenda', list);
+    refreshKiraWidget(); // lot 41 : le widget affiche le prochain évènement
   };
 
   const addEvent = async () => {

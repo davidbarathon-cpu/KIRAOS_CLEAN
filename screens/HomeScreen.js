@@ -26,6 +26,7 @@ import { getTheme, KIRA_STATE_COLORS, KIRA_STATE_LABELS, PALETTE } from '../util
 import { getCustomModules, versEntreeModuleAccueil } from '../utils/customModules';
 import { getAllApiKeys } from '../utils/apiKeys';
 import { getMeteoReelle } from '../utils/weatherCaller';
+import { cacherMeteoPourWidget, refreshKiraWidget } from '../utils/widgetUpdater';
 
 const DICTONS = [
   { t: 'La musique est la sténographie des émotions.', a: 'Tolstoï' },
@@ -83,6 +84,10 @@ export default function HomeScreen({ navigation }) {
     const ville = profil?.ville || 'Villeneuve-sur-Lot';
     const data = await getMeteoReelle(ville, keys?.openweathermap);
     setMeteo({ temp: data.temp, icon: data.icon });
+    // lot 41 : garde une copie fraîche pour que le widget écran d'accueil
+    // puisse l'afficher sans refaire son propre appel réseau
+    cacherMeteoPourWidget({ temp: data.temp, icon: data.icon });
+    refreshKiraWidget();
   }, [meteo.temp]);
 
   const loadData = useCallback(async () => {
@@ -100,6 +105,8 @@ export default function HomeScreen({ navigation }) {
     setKiraState(analyzeContext(a || [], s || {}, heureStr));
     setPredictions(generatePredictions(a || [], s || {}, heureStr));
     chargerMeteo();
+    // lot 41 : agenda/santé viennent de changer de valeur → widget à jour
+    refreshKiraWidget();
   }, [chargerMeteo]);
 
   // CORRECTIF LOT 39 : resynchronise l'horloge à chaque retour sur cet

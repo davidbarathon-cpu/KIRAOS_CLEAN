@@ -1,13 +1,16 @@
 // ═══════════════════════════════════════════
 //  PARKINGSCREEN.JS — Module Parking
-//  Position de la voiture, temps de stationnement
-//  restant. La vraie carte (avec react-native-maps)
-//  et le GPS réel viendront dans un lot futur —
-//  pour l'instant structure + données manuelles.
+//  MISE À JOUR LOT 42 : position GPS réelle
+//  (expo-location) + carte interactive sombre
+//  (react-native-maps) + bouton "Me guider"
+//  qui ouvre Google Maps en itinéraire piéton.
 // ═══════════════════════════════════════════
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
+    Alert,
+    Linking,
     ScrollView,
     StyleSheet,
     Text,
@@ -15,6 +18,9 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import * as Location from 'expo-location';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { useFocusEffect } from '@react-navigation/native';
 import { BackButton, SectionLabel } from '../components/Shared';
 import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
@@ -25,7 +31,27 @@ const DEFAULT_PARKING = {
   dureeHeures: 2,
   note: 'Parking gratuit, 2h max',
   actif: true,
+  lat: null,
+  lng: null,
 };
+
+// Style de carte sombre (Google Maps "night mode") pour rester cohérent
+// avec le thème Cosmos du reste de l'application.
+const CARTE_SOMBRE = [
+  { elementType: 'geometry', stylers: [{ color: '#0e0e1e' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0e0e1e' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#8888aa' }] },
+  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#c0c0e0' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#6a6a8a' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#14251c' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1c1c2e' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#0e0e1e' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#8888aa' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#2a2a45' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#1c1c2e' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#050510' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a4a6a' }] },
+];
 
 function calculerMinutesRestantes(heureArrivee, dureeHeures) {
   const [h, m] = heureArrivee.split(':').map(Number);
@@ -45,11 +71,36 @@ function formatHeureExpiration(heureArrivee, dureeHeures) {
   return `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
 }
 
+/**
+ * Distance à vol d'oiseau entre deux points GPS (formule de Haversine).
+ * Retourne une distance en mètres.
+ */
+function calculerDistanceMetres(lat1, lng1, lat2, lng2) {
+  const R = 6371000; // rayon de la Terre en mètres
+  const toRad = deg => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function formatDistance(metres) {
+  if (metres === null || metres === undefined) return null;
+  if (metres < 1000) return `${Math.round(metres)} m`;
+  return `${(metres / 1000).toFixed(1)} km`;
+}
+
 export default function ParkingScreen({ navigation }) {
   const theme = getTheme('cosmos');
   const [parking, setParking] = useState(DEFAULT_PARKING);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(DEFAULT_PARKING);
+  const [localisationEnCours, setLocalisationEnCours] = useState(false);
+  const [distanceMetres, setDistanceMetres] = useState(null);
+  const [actualisationDistance, setActualisationDistance] = useState(false);
 
   useEffect(() => {
     getData('parking').then(p => {
@@ -58,6 +109,17 @@ export default function ParkingScreen({ navigation }) {
       setForm(data);
     });
   }, []);
+
+  // Recalcule automatiquement la distance jusqu'à la voiture à chaque
+  // fois qu'on revient sur cet écran (si une position GPS est enregistrée).
+  useFocusEffect(
+    useCallback(() => {
+      if (parking.actif && parking.lat && parking.lng) {
+        actualiserDistance();
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [parking.actif, parking.lat, parking.lng])
+  );
 
   const save = async () => {
     const updated = { ...form, actif: true };
@@ -70,6 +132,81 @@ export default function ParkingScreen({ navigation }) {
     const cleared = { ...parking, actif: false };
     setParking(cleared);
     await setData('parking', cleared);
+    setDistanceMetres(null);
+  };
+
+  /**
+   * Demande la permission de localisation puis récupère la position GPS
+   * actuelle du téléphone pour pré-remplir automatiquement l'adresse et
+   * les coordonnées du formulaire — c'est ce qui alimente ensuite la
+   * carte et le bouton "Me guider".
+   */
+  const utiliserPositionActuelle = async () => {
+    setLocalisationEnCours(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission refusée',
+          "Autorise l'accès à la position dans les réglages Android pour que Kira puisse enregistrer automatiquement l'endroit où tu te gares."
+        );
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const { latitude, longitude } = position.coords;
+
+      let adresseTexte = form.adresse;
+      try {
+        const [lieu] = await Location.reverseGeocodeAsync({ latitude, longitude });
+        if (lieu) {
+          adresseTexte = [lieu.streetNumber, lieu.street, lieu.postalCode, lieu.city].filter(Boolean).join(' ');
+        }
+      } catch {
+        // La géolocalisation inversée peut échouer (pas de réseau...) —
+        // on garde alors l'adresse déjà saisie, les coordonnées restent utiles.
+      }
+
+      setForm(f => ({ ...f, lat: latitude, lng: longitude, adresse: adresseTexte || f.adresse }));
+    } catch (e) {
+      Alert.alert('Erreur de localisation', e.message || "Impossible de récupérer ta position pour le moment.");
+    } finally {
+      setLocalisationEnCours(false);
+    }
+  };
+
+  /**
+   * Recalcule la distance entre la position actuelle du téléphone et la
+   * voiture garée, sans modifier la position enregistrée de la voiture.
+   */
+  const actualiserDistance = async () => {
+    if (!parking.lat || !parking.lng) return;
+    setActualisationDistance(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const d = calculerDistanceMetres(position.coords.latitude, position.coords.longitude, parking.lat, parking.lng);
+      setDistanceMetres(d);
+    } catch {
+      // Pas bloquant : on affiche simplement pas de distance si ça échoue.
+    } finally {
+      setActualisationDistance(false);
+    }
+  };
+
+  /**
+   * Ouvre Google Maps avec un itinéraire piéton jusqu'à la voiture. Si on
+   * n'a pas de coordonnées GPS enregistrées (ancienne position saisie à la
+   * main avant ce lot), on retombe sur une recherche par adresse.
+   */
+  const guiderVersVoiture = () => {
+    const url = parking.lat && parking.lng
+      ? `https://www.google.com/maps/dir/?api=1&destination=${parking.lat},${parking.lng}&travelmode=walking`
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parking.adresse)}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Erreur', "Impossible d'ouvrir Google Maps. Vérifie qu'il est bien installé sur ton téléphone.");
+    });
   };
 
   const minutesRestantes = parking.actif
@@ -77,6 +214,7 @@ export default function ParkingScreen({ navigation }) {
     : null;
   const heureExpiration = formatHeureExpiration(parking.heureArrivee, parking.dureeHeures);
   const urgence = minutesRestantes !== null && minutesRestantes < 30;
+  const aUnePositionGPS = !!(parking.lat && parking.lng);
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
@@ -96,11 +234,51 @@ export default function ParkingScreen({ navigation }) {
               </View>
             </View>
 
-            {/* Emplacement carte simplifiée — la vraie carte interactive viendra avec react-native-maps */}
-            <View style={styles.mapPlaceholder}>
-              <Text style={{ fontSize: 30 }}>🗺️</Text>
-              <Text style={styles.mapPlaceholderText}>Carte interactive à venir{'\n'}(react-native-maps)</Text>
-            </View>
+            {/* Carte interactive réelle si on a une position GPS, sinon message d'invitation */}
+            {aUnePositionGPS ? (
+              <View style={styles.mapWrap}>
+                <MapView
+                  provider={PROVIDER_GOOGLE}
+                  style={styles.map}
+                  customMapStyle={CARTE_SOMBRE}
+                  initialRegion={{
+                    latitude: parking.lat,
+                    longitude: parking.lng,
+                    latitudeDelta: 0.006,
+                    longitudeDelta: 0.006,
+                  }}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                  rotateEnabled={false}
+                  pitchEnabled={false}
+                  onPress={guiderVersVoiture}
+                >
+                  <Marker coordinate={{ latitude: parking.lat, longitude: parking.lng }} pinColor={PALETTE.cyan} />
+                </MapView>
+              </View>
+            ) : (
+              <View style={styles.mapPlaceholder}>
+                <Text style={{ fontSize: 30 }}>🗺️</Text>
+                <Text style={styles.mapPlaceholderText}>
+                  Appuie sur "✏️ Modifier" puis "📍 Utiliser ma position actuelle"{'\n'}pour afficher la carte ici.
+                </Text>
+              </View>
+            )}
+
+            {aUnePositionGPS && (
+              <View style={styles.distanceRow}>
+                <Text style={styles.distanceText}>
+                  {distanceMetres !== null ? `📏 Environ ${formatDistance(distanceMetres)} de ta position` : '📏 Distance inconnue'}
+                </Text>
+                <TouchableOpacity onPress={actualiserDistance} disabled={actualisationDistance}>
+                  {actualisationDistance ? (
+                    <ActivityIndicator color={PALETTE.cyan} size="small" />
+                  ) : (
+                    <Text style={{ color: PALETTE.cyan, fontSize: 16 }}>🔄</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
 
             <View style={styles.statsRow}>
               <View style={styles.statBox}>
@@ -134,6 +312,13 @@ export default function ParkingScreen({ navigation }) {
               </Text>
             </View>
 
+            <TouchableOpacity
+              style={[styles.guideBtn, { backgroundColor: PALETTE.cyan }]}
+              onPress={guiderVersVoiture}
+            >
+              <Text style={{ color: '#000', fontWeight: '700', fontSize: 13 }}>🧭 Me guider jusqu'à ma voiture</Text>
+            </TouchableOpacity>
+
             <View style={styles.actionsRow}>
               <TouchableOpacity
                 style={[styles.actionBtn, { backgroundColor: PALETTE.cyan + '15', borderColor: PALETTE.cyan + '30' }]}
@@ -164,7 +349,22 @@ export default function ParkingScreen({ navigation }) {
 
         {editing && (
           <View style={[styles.editForm, { borderColor: PALETTE.cyan + '25' }]}>
-            <SectionLabel>Adresse de stationnement</SectionLabel>
+            <TouchableOpacity
+              style={[styles.gpsBtn, { backgroundColor: PALETTE.cyan + '18', borderColor: PALETTE.cyan + '44' }]}
+              onPress={utiliserPositionActuelle}
+              disabled={localisationEnCours}
+            >
+              {localisationEnCours ? (
+                <ActivityIndicator color={PALETTE.cyan} size="small" />
+              ) : (
+                <Text style={{ color: PALETTE.cyan, fontWeight: '700', fontSize: 13 }}>📍 Utiliser ma position actuelle</Text>
+              )}
+            </TouchableOpacity>
+            {form.lat && form.lng && (
+              <Text style={styles.gpsOk}>✅ Position GPS enregistrée — la carte et le guidage seront disponibles.</Text>
+            )}
+
+            <SectionLabel style={{ marginTop: 14 }}>Adresse de stationnement</SectionLabel>
             <TextInput
               style={styles.input}
               placeholder="Adresse..."
@@ -216,10 +416,6 @@ export default function ParkingScreen({ navigation }) {
             </View>
           </View>
         )}
-
-        <Text style={styles.comingSoon}>
-          🚧 GPS automatique et carte interactive réelle arriveront avec react-native-maps dans un lot futur.
-        </Text>
       </ScrollView>
     </View>
   );
@@ -241,6 +437,8 @@ const styles = StyleSheet.create({
   parkHeader: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', marginBottom: 14 },
   parkTitle: { fontSize: 13, fontWeight: '600', color: '#fff' },
   parkAdresse: { fontSize: 11, marginTop: 2 },
+  mapWrap: { height: 160, borderRadius: 12, overflow: 'hidden', marginBottom: 10 },
+  map: { flex: 1 },
   mapPlaceholder: {
     height: 100,
     backgroundColor: 'rgba(0,0,0,0.3)',
@@ -248,8 +446,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
+    paddingHorizontal: 12,
   },
   mapPlaceholderText: { fontSize: 10, color: '#444455', textAlign: 'center', marginTop: 6, lineHeight: 14 },
+  distanceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingHorizontal: 2 },
+  distanceText: { fontSize: 11, color: '#aab', fontWeight: '600' },
   statsRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   statBox: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 10, padding: 10, alignItems: 'center' },
   statLabel: { fontSize: 10, color: '#666677', marginTop: 3 },
@@ -258,12 +459,15 @@ const styles = StyleSheet.create({
   coachBox: { borderRadius: 12, padding: 12, borderWidth: 1, marginBottom: 14 },
   coachLabel: { fontSize: 11, fontWeight: '600', marginBottom: 4 },
   coachText: { fontSize: 12, color: '#ccc', lineHeight: 18 },
+  guideBtn: { padding: 13, borderRadius: 12, alignItems: 'center', marginBottom: 10 },
   actionsRow: { flexDirection: 'row', gap: 8 },
   actionBtn: { flex: 1, padding: 11, borderRadius: 11, borderWidth: 1, alignItems: 'center' },
   emptyState: { alignItems: 'center', paddingVertical: 30 },
   emptyText: { fontSize: 13, color: '#555566', marginBottom: 16, textAlign: 'center' },
   addParkBtn: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 99 },
   editForm: { backgroundColor: 'rgba(34,211,238,0.07)', borderRadius: 14, padding: 14, borderWidth: 1, marginTop: 14 },
+  gpsBtn: { padding: 12, borderRadius: 11, borderWidth: 1, alignItems: 'center' },
+  gpsOk: { fontSize: 10, color: PALETTE.teal, marginTop: 8, textAlign: 'center' },
   fieldLabel: { fontSize: 10, color: '#888899', marginBottom: 4, marginTop: 8 },
   input: {
     backgroundColor: 'rgba(255,255,255,0.06)',
@@ -277,5 +481,4 @@ const styles = StyleSheet.create({
   row2: { flexDirection: 'row', gap: 8 },
   formActions: { flexDirection: 'row', gap: 8, marginTop: 14 },
   formBtn: { flex: 1, padding: 11, borderRadius: 10, alignItems: 'center' },
-  comingSoon: { fontSize: 11, color: '#333344', textAlign: 'center', marginTop: 16, lineHeight: 16 },
 });

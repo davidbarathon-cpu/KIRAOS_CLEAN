@@ -1,14 +1,18 @@
 {
   "expo": {
     "name": "KiraOS_Clean",
-    "scheme": "kiraosclean",
     "slug": "kiraosclean",
+    "projectId": "f5161002-4544-4555-8933-c2303c6f9188",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Kira a besoin de la reconnaissance vocale.",
+        "NSMicrophoneUsageDescription": "Kira a besoin du micro."
+      }
     },
     "plugins": [
       [
@@ -21,43 +25,76 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Kira a besoin d'accéder à tes photos pour analyser tes plantes.",
-          "cameraPermission": "Kira a besoin de la caméra pour photographier tes plantes."
+          "photosPermission": "Kira a besoin d'accéder à tes photos.",
+          "cameraPermission": "Kira a besoin de la caméra."
         }
       ],
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "Kira a besoin du micro pour t'écouter.",
-          "speechRecognitionPermission": "Kira a besoin de la reconnaissance vocale pour comprendre ce que tu dis."
+          "microphonePermission": "Kira a besoin du micro.",
+          "speechRecognitionPermission": "Kira a besoin de la reconnaissance vocale."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Kira a besoin de ta position."
         }
       ],
       "expo-web-browser",
       "expo-sharing",
       "expo-quick-actions",
       "expo-secure-store",
-      "expo-audio"
+      "expo-audio",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "KiraMaxi",
+              "label": "Kira OS — Maxi",
+              "description": "Tableau de bord Kira",
+              "minWidth": "250dp",
+              "minHeight": "300dp",
+              "targetCellWidth": 5,
+              "targetCellHeight": 5,
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ],
     "android": {
       "permissions": [
-        "NOTIFICATIONS",
-        "SCHEDULE_EXACT_ALARM",
-        "CAMERA",
-        "READ_MEDIA_IMAGES",
-        "RECORD_AUDIO"
+        "android.permission.NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#000000",
         "foregroundImage": "./assets/icon.png"
       },
-      "package": "com.bdadoo.KiraOS_Clean"
+      "package": "com.bdadoo.KiraOS_Clean",
+      "config": {
+        "googleMaps": {
+          "apiKey": "COLLE_TA_CLE_GOOGLE_MAPS_ANDROID_ICI"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
-        "projectId": "fb9b1dc2-4544-41d6-b981-72e30689f800"
+        "projectId": "3b752b86-2403-41df-8717-7a732907753d"
       }
     }
   }

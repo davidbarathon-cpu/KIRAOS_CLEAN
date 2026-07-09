@@ -32,6 +32,25 @@ import WeatherFX from './components/WeatherFX';
 
 const Stack = createNativeStackNavigator();
 
+// ── Deep-linking (lot 41) ──
+// Nécessaire pour que les boutons du widget "Kira OS — Maxi" (écran
+// d'accueil Android) puissent ouvrir directement un écran précis de
+// l'app (ex: kiraosclean://ecoute → écran d'écoute rapide) plutôt que
+// de simplement rouvrir l'app sur l'accueil.
+const linking = {
+  prefixes: ['kiraosclean://'],
+  config: {
+    screens: {
+      Home: '',
+      Agenda: 'agenda',
+      Meteo: 'meteo',
+      Sante: 'sante',
+      KiraChat: 'chat',
+      EcouteRapide: 'ecoute',
+    },
+  },
+};
+
 // ── Déclaration du App Shortcut Android ──
 // "Parler à Kira" apparaît dans le menu qui s'ouvre par appui long sur
 // l'icône de l'app, depuis l'écran d'accueil du téléphone — sans avoir
@@ -83,7 +102,7 @@ export default function App() {
   return (
     <>
       <StatusBar style="light" backgroundColor={THEMES.cosmos.bg} />
-      <NavigationContainer ref={navigationRef}>
+      <NavigationContainer ref={navigationRef} linking={linking}>
         <Stack.Navigator
           initialRouteName="Home"
           screenOptions={{

@@ -15,6 +15,7 @@ import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
 import { getMeteoReelle } from '../utils/weatherCaller';
 import { getPhaseLunaireActuelle, getProchainesPhasesPrincipales } from '../utils/moonPhase';
+import { cacherMeteoPourWidget, refreshKiraWidget } from '../utils/widgetUpdater';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -103,6 +104,9 @@ export default function MeteoScreen({ navigation }) {
     const data = await getMeteoReelle(ville, apiKey);
     setMeteo(data);
     setLoading(false);
+    // lot 41 : le widget écran d'accueil réutilise cette donnée fraîche
+    cacherMeteoPourWidget({ temp: data.temp, icon: data.icon });
+    refreshKiraWidget();
   }, []);
 
   useFocusEffect(useCallback(() => { chargerMeteo(); }, [chargerMeteo]));

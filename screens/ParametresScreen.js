@@ -44,6 +44,12 @@ import { getCustomModules, supprimerCustomModule } from '../utils/customModules'
 import { apparierAvecBridge } from '../utils/driverPhilipsHue';
 import { getFaitsMemorises, oublierFait, oublierTout } from '../utils/kiraMemoire';
 import { demarrerEcoutePermanente, arreterEcoutePermanente, ecoutePermanenteActive } from '../utils/wakeWordService';
+import {
+  connecterHealthConnect,
+  deconnecterHealthConnect,
+  estConnecteAHealthConnect,
+  ouvrirInstallationHealthConnect,
+} from '../utils/healthConnectService';
 import { deconnecterGoogle, estConnecteAGoogle, getGoogleClientId, setGoogleClientId } from '../utils/googleAuth';
 import {
   annulerParCle,
@@ -89,6 +95,7 @@ export default function ParametresScreen({ navigation }) {
   const [ecouteActive, setEcouteActive] = useState(false);
   const [ecouteChargement, setEcouteChargement] = useState(false);
   const [ecouteMsg, setEcouteMsg] = useState(null);
+  const [hcConnecte, setHcConnecteState] = useState(false);
 
   // ── État spécifique à la section API ──
   const [apiKeys, setApiKeysState] = useState({});
@@ -145,6 +152,7 @@ export default function ParametresScreen({ navigation }) {
       setActualitesProvidersActifsState(await getActualitesProvidersActifs());
       setKiraIconActiveState(await getActiveKiraIcon());
       setEcouteActive(ecoutePermanenteActive());
+      setHcConnecteState(await estConnecteAHealthConnect());
     })();
   }, []);
 
@@ -712,6 +720,53 @@ export default function ParametresScreen({ navigation }) {
             <TouchableOpacity onPress={() => ouvrirLien('https://console.cloud.google.com/')}>
               <Text style={[styles.lienCreation, { color: accent }]}>🔗 Ouvrir Google Cloud Console →</Text>
             </TouchableOpacity>
+          </View>
+
+          {/* ── Health Connect (lot 45 — pas de clé, juste une autorisation système) ── */}
+          <SectionLabel style={{ marginTop: 18 }}>🏃 Health Connect (Fitbit, Garmin, Samsung Health...)</SectionLabel>
+          <View style={[styles.providerCard, { borderColor: hcConnecte ? PALETTE.green + '35' : 'rgba(255,255,255,0.07)' }]}>
+            <View style={styles.providerHeader}>
+              <Text style={{ fontSize: 20 }}>🏃</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.providerName}>Health Connect</Text>
+                <Text style={styles.providerDesc}>
+                  L'app santé centrale d'Android. Si Fitbit, Garmin Connect, Samsung Health ou
+                  une autre app y écrit déjà tes données (à activer une fois dans CETTE app-là),
+                  Kira les récupère automatiquement — sans intégration séparée par marque.
+                </Text>
+              </View>
+              {hcConnecte && <Text style={styles.connectedTag}>✓ Connecté</Text>}
+            </View>
+            <View style={styles.providerActions}>
+              {hcConnecte ? (
+                <TouchableOpacity style={styles.smallBtnDanger} onPress={async () => { await deconnecterHealthConnect(); setHcConnecteState(false); }}>
+                  <Text style={styles.smallBtnDangerText}>Déconnecter</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.smallBtn, { backgroundColor: accent }]}
+                  onPress={async () => {
+                    const { succes, erreur } = await connecterHealthConnect();
+                    if (!succes && erreur === 'NON_INSTALLE') {
+                      Alert.alert(
+                        'Health Connect non installé',
+                        "Installe l'app Health Connect (gratuite, éditée par Google) depuis le Play Store, puis reviens ici.",
+                        [{ text: 'Ouvrir le Play Store', onPress: ouvrirInstallationHealthConnect }, { text: 'Annuler', style: 'cancel' }]
+                      );
+                      return;
+                    }
+                    setHcConnecteState(succes);
+                  }}
+                >
+                  <Text style={styles.smallBtnTextDark}>Connecter</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <Text style={styles.infoSmall}>
+              💡 Pense à vérifier dans Fitbit/Garmin/Samsung Health (Réglages → Health Connect
+              ou Synchronisation) que le partage vers Health Connect est bien activé — c'est un
+              réglage propre à chaque app, Kira ne peut pas l'activer à leur place.
+            </Text>
           </View>
 
           {/* ── Resend (envoi d'email — clé simple comme météo/traduction/actu) ── */}

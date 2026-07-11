@@ -1,18 +1,22 @@
 // ═══════════════════════════════════════════
 //  SANTESCREEN.JS — Module Santé
-//  MISE À JOUR LOT 44 (étape 1/2) : données réellement
-//  interactives — ajout d'eau en un geste, saisie manuelle
-//  du poids/sommeil/pas/calories/FC, vrai historique
-//  quotidien, conseils Kira qui varient selon les vraies
-//  données. La connexion Health Connect (récupération
-//  automatique pas/sommeil/FC) viendra à l'étape 2/2.
+//  MISE À JOUR LOT 45 : connexion à Health Connect (récupération
+//  automatique pas/calories/FC/sommeil/poids depuis le téléphone ou
+//  toute app compatible : Fitbit, Garmin, Samsung Health...).
+//  La saisie manuelle (lot 44) reste disponible en complément/secours.
 // ═══════════════════════════════════════════
 
 import { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import ExportPdfModal from '../components/ExportPdfModal';
 import { BackButton, ProgressRing, SectionLabel } from '../components/Shared';
+import {
+  connecterHealthConnect,
+  estConnecteAHealthConnect,
+  ouvrirInstallationHealthConnect,
+  synchroniserDepuisHealthConnect,
+} from '../utils/healthConnectService';
 import { ajouterEau, genererConseilSante, getSanteDuJour, mettreAJourSante } from '../utils/santeManager';
 import { getTheme, PALETTE } from '../utils/theme';
 import { refreshKiraWidget } from '../utils/widgetUpdater';
@@ -29,13 +33,38 @@ export default function SanteScreen({ navigation }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [ajoutEauEnCours, setAjoutEauEnCours] = useState(false);
+  const [hcConnecte, setHcConnecte] = useState(false);
+  const [hcSyncEnCours, setHcSyncEnCours] = useState(false);
+  const [hcErreur, setHcErreur] = useState(null);
 
   const charger = useCallback(async () => {
+    const connecte = await estConnecteAHealthConnect();
+    setHcConnecte(connecte);
+
+    if (connecte) {
+      setHcSyncEnCours(true);
+      const { erreur } = await synchroniserDepuisHealthConnect();
+      setHcErreur(erreur);
+      setHcSyncEnCours(false);
+    }
+
     const data = await getSanteDuJour();
     setSante(data);
   }, []);
 
   useFocusEffect(useCallback(() => { charger(); }, [charger]));
+
+  const connecterHC = async () => {
+    setHcSyncEnCours(true);
+    const { succes, erreur } = await connecterHealthConnect();
+    setHcSyncEnCours(false);
+    if (!succes && erreur === 'NON_INSTALLE') {
+      ouvrirInstallationHealthConnect();
+      return;
+    }
+    if (succes) await charger();
+    else setHcErreur(erreur);
+  };
 
   const boireEau = async litres => {
     setAjoutEauEnCours(true);
@@ -87,6 +116,32 @@ export default function SanteScreen({ navigation }) {
           <Text style={{ fontSize: 13 }}>📄</Text>
         </TouchableOpacity>
       </View>
+
+      {/* ── Bandeau Health Connect (lot 45) ── */}
+      <View style={[styles.hcBanner, hcConnecte ? styles.hcBannerOk : styles.hcBannerOff]}>
+        <Text style={{ fontSize: 16 }}>{hcConnecte ? '🟢' : '🔗'}</Text>
+        <Text style={styles.hcBannerText}>
+          {hcConnecte
+            ? 'Synchronisé avec Health Connect (Fitbit, Garmin, Samsung Health...)'
+            : 'Connecte Health Connect pour remonter pas/FC/sommeil automatiquement'}
+        </Text>
+        {hcSyncEnCours ? (
+          <ActivityIndicator color={theme.accent} size="small" />
+        ) : hcConnecte ? (
+          <TouchableOpacity onPress={charger}>
+            <Text style={[styles.hcBannerAction, { color: theme.accent }]}>🔄</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={connecterHC}>
+            <Text style={[styles.hcBannerAction, { color: theme.accent }]}>Connecter →</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      {hcErreur && hcErreur !== 'NON_INSTALLE' && (
+        <View style={styles.hcErreurBanner}>
+          <Text style={styles.hcErreurText}>⚠️ Synchronisation Health Connect : {hcErreur.slice(0, 100)}</Text>
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>
         <View style={styles.ringsGrid}>
@@ -231,6 +286,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#fff', flex: 1 },
   exportBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 99, backgroundColor: 'rgba(255,255,255,0.06)' },
+  hcBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 9 },
+  hcBannerOk: { backgroundColor: 'rgba(67,217,173,0.1)' },
+  hcBannerOff: { backgroundColor: 'rgba(108,99,255,0.08)' },
+  hcBannerText: { flex: 1, fontSize: 10, color: '#aaa' },
+  hcBannerAction: { fontSize: 11, fontWeight: '700' },
+  hcErreurBanner: { backgroundColor: 'rgba(255,101,132,0.12)', paddingHorizontal: 16, paddingVertical: 7 },
+  hcErreurText: { fontSize: 10, color: PALETTE.pink },
   ringsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-around',

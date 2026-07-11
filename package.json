@@ -32,6 +32,8 @@
     "react-native-screens": "4.25.2",
     "react-native-svg": "15.15.4",
     "react-native-webview": "13.16.1",
+    "react-native-health-connect": "^3.5.3",
+"expo-build-properties": "~56.0.0",
     "@picovoice/porcupine-react-native": "^4.0.0",
 "@picovoice/react-native-voice-processor": "^1.2.3",
 "react-native-background-actions": "^4.1.0"

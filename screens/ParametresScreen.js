@@ -50,6 +50,7 @@ import {
   estConnecteAHealthConnect,
   ouvrirInstallationHealthConnect,
 } from '../utils/healthConnectService';
+import { getTuyaConfigActuelle, setTuyaConfig } from '../utils/driverTuya';
 import { deconnecterGoogle, estConnecteAGoogle, getGoogleClientId, setGoogleClientId } from '../utils/googleAuth';
 import {
   annulerParCle,
@@ -96,6 +97,9 @@ export default function ParametresScreen({ navigation }) {
   const [ecouteChargement, setEcouteChargement] = useState(false);
   const [ecouteMsg, setEcouteMsg] = useState(null);
   const [hcConnecte, setHcConnecteState] = useState(false);
+  const [tuyaForm, setTuyaForm] = useState({ clientId: '', clientSecret: '', uid: '', region: 'eu' });
+  const [tuyaConfigure, setTuyaConfigure] = useState(false);
+  const [tuyaMsg, setTuyaMsg] = useState(null);
 
   // ── État spécifique à la section API ──
   const [apiKeys, setApiKeysState] = useState({});
@@ -153,6 +157,14 @@ export default function ParametresScreen({ navigation }) {
       setKiraIconActiveState(await getActiveKiraIcon());
       setEcouteActive(ecoutePermanenteActive());
       setHcConnecteState(await estConnecteAHealthConnect());
+      const tuyaConfig = await getTuyaConfigActuelle();
+      setTuyaForm({
+        clientId: tuyaConfig.clientId || '',
+        clientSecret: tuyaConfig.clientSecret || '',
+        uid: tuyaConfig.uid || '',
+        region: tuyaConfig.region || 'eu',
+      });
+      setTuyaConfigure(!!(tuyaConfig.clientId && tuyaConfig.clientSecret && tuyaConfig.uid));
     })();
   }, []);
 
@@ -858,6 +870,66 @@ export default function ParametresScreen({ navigation }) {
             </Text>
           </View>
 
+          {/* ── Tuya / Smart Life (lot 46 — API cloud, 3 identifiants) ── */}
+          <SectionLabel style={{ marginTop: 18 }}>🔵 Tuya / Smart Life (Domotique)</SectionLabel>
+          <View style={[styles.providerCard, { borderColor: tuyaConfigure ? PALETTE.green + '35' : 'rgba(255,255,255,0.07)' }]}>
+            <View style={styles.providerHeader}>
+              <Text style={{ fontSize: 20 }}>🔵</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.providerName}>Tuya Cloud (Smart Life)</Text>
+                <Text style={styles.providerDesc}>
+                  Fonctionne aussi avec beaucoup de marques génériques (prises/ampoules pas
+                  chères) qui utilisent la puce et le cloud Tuya en coulisses. Voir le guide
+                  d'installation pour créer ton projet Tuya IoT et lier ton compte Smart Life.
+                </Text>
+              </View>
+              {tuyaConfigure && <Text style={styles.connectedTag}>✓ Configuré</Text>}
+            </View>
+
+            <Text style={[styles.fieldLabel, { marginTop: 10 }]}>Région</Text>
+            <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+              {[['eu', 'Europe'], ['us', 'Amériques'], ['cn', 'Chine'], ['in', 'Inde']].map(([code, label]) => (
+                <TouchableOpacity
+                  key={code}
+                  onPress={() => setTuyaForm({ ...tuyaForm, region: code })}
+                  style={[
+                    styles.sonChipLike,
+                    { borderColor: tuyaForm.region === code ? accent : 'rgba(255,255,255,0.1)', backgroundColor: tuyaForm.region === code ? accent + '22' : 'transparent' },
+                  ]}
+                >
+                  <Text style={{ fontSize: 11, color: tuyaForm.region === code ? accent : '#888899' }}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.fieldLabel}>Client ID (Access ID)</Text>
+            <TextInput style={styles.keyInput} placeholder="1KAD46OrT9HafiKd..." placeholderTextColor="#555566" value={tuyaForm.clientId} onChangeText={t => setTuyaForm({ ...tuyaForm, clientId: t })} autoCapitalize="none" autoCorrect={false} />
+            <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Client Secret (Access Secret)</Text>
+            <TextInput style={styles.keyInput} placeholder="Secret du projet Tuya" placeholderTextColor="#555566" value={tuyaForm.clientSecret} onChangeText={t => setTuyaForm({ ...tuyaForm, clientSecret: t })} autoCapitalize="none" autoCorrect={false} secureTextEntry />
+            <Text style={[styles.fieldLabel, { marginTop: 8 }]}>UID (compte lié dans "Link Tuya App Account")</Text>
+            <TextInput style={styles.keyInput} placeholder="UID affiché après liaison du compte" placeholderTextColor="#555566" value={tuyaForm.uid} onChangeText={t => setTuyaForm({ ...tuyaForm, uid: t })} autoCapitalize="none" autoCorrect={false} />
+
+            <View style={styles.providerActions}>
+              <TouchableOpacity
+                style={[styles.smallBtn, { backgroundColor: accent }]}
+                onPress={async () => {
+                  await setTuyaConfig(tuyaForm);
+                  setTuyaConfigure(!!(tuyaForm.clientId && tuyaForm.clientSecret && tuyaForm.uid));
+                  setTuyaMsg('✅ Configuration Tuya enregistrée !');
+                  setTimeout(() => setTuyaMsg(null), 2500);
+                }}
+              >
+                <Text style={styles.smallBtnTextDark}>Enregistrer</Text>
+              </TouchableOpacity>
+            </View>
+            {tuyaMsg && <Text style={styles.savedKeyText}>{tuyaMsg}</Text>}
+
+            <Text style={styles.infoSmall}>
+              💡 Une fois enregistré ici, active le driver "Tuya / Smart Life" dans le module
+              Domotique (section "Écosystèmes disponibles") pour voir apparaître tes appareils.
+            </Text>
+          </View>
+
           {/* IA pour Kira */}
           <SectionLabel style={{ marginTop: 22 }}>🌟 Cerveau de Kira (IA)</SectionLabel>
           <Text style={styles.infoSmall}>
@@ -1225,6 +1297,7 @@ const styles = StyleSheet.create({
   smallBtnDanger: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 99, backgroundColor: 'rgba(255,101,132,0.12)' },
   smallBtnDangerText: { fontSize: 11, color: PALETTE.pink, fontWeight: '600' },
   activeTag: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 99, backgroundColor: 'rgba(108,99,255,0.15)' },
+  sonChipLike: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 99, borderWidth: 1 },
   activeTagText: { fontSize: 11, color: PALETTE.violet, fontWeight: '700' },
   editKeyBox: { marginTop: 8 },
   keyInput: { backgroundColor: 'rgba(0,0,0,0.3)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 9, color: '#fff', fontSize: 12, padding: 10, marginBottom: 8 },

@@ -25,6 +25,7 @@
 
 import { driverDemo } from './driverDemo';
 import { driverPhilipsHue } from './driverPhilipsHue';
+import { driverTuya } from './driverTuya';
 
 /**
  * Registre central de tous les drivers disponibles dans l'app.
@@ -34,9 +35,9 @@ import { driverPhilipsHue } from './driverPhilipsHue';
 export const DRIVERS_DISPONIBLES = [
   driverDemo,
   driverPhilipsHue,
+  driverTuya,
   // Prochains drivers possibles (structure prête, pas encore implémentés) :
   // driverTpLinkKasa,    — ampoules/prises TP-Link Kasa, API cloud avec compte gratuit
-  // driverTuya,          — écosystème Tuya/Smart Life, très répandu sur les produits génériques
   // driverHomeAssistant, — pont universel si l'utilisateur a déjà un serveur Home Assistant
 ];
 

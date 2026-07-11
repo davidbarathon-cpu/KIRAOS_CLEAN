@@ -34,6 +34,7 @@ const DEFAULTS = {
     calObj: 2200,
     sleepObj: 8,
     pasObj: 10000,
+    eauObj: 2.5,
   },
   sante: {
     pas: 7842,
@@ -46,7 +47,9 @@ const DEFAULTS = {
     poids: 73.5,
     eau: 1.4,
     oEau: 2.5,
+    jour: null,
   },
+  sante_historique: [],
   agenda: [
     { id: 1, h: '08:30', t: 'Stand-up équipe', c: '#6C63FF', l: 'Zoom', dur: '15min' },
     { id: 2, h: '10:00', t: 'Revue de sprint', c: '#FF6584', l: 'Salle Neon', dur: '1h' },

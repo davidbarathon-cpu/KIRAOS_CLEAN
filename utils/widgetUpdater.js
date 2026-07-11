@@ -47,6 +47,7 @@ export async function getKiraWidgetSnapshot() {
   const date = now.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
 
   const s = sante || {};
+  const p = profil || {};
   const h = now.getHours();
   const list = agenda || [];
   const soon = list.filter(e => {
@@ -66,9 +67,9 @@ export async function getKiraWidgetSnapshot() {
     date,
     kiraState,
     sante: {
-      pas: s.pas || 0, oP: s.oP || 10000,
-      eau: s.eau || 0, oEau: s.oEau || 2.5,
-      som: s.som || 0, oSom: s.oSom || 8,
+      pas: s.pas || 0, oP: p.pasObj || s.oP || 10000,
+      eau: s.eau || 0, oEau: p.eauObj || s.oEau || 2.5,
+      som: s.som || 0, oSom: p.sleepObj || s.oSom || 8,
     },
     prochainEvenement: prochain ? { heure: prochain.h, titre: (prochain.t || '').slice(0, 40) } : null,
     meteo: meteoCache || { temp: null, icon: '⛅' },

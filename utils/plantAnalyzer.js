@@ -51,7 +51,6 @@ async function analyserAvecGemini(imageBase64, apiKey, modele = 'gemini-2.5-flas
       generationConfig: { 
         temperature: 0.4, 
         maxOutputTokens: 500,
-        // Force l'API à renvoyer un JSON valide et complet
         responseMimeType: "application/json" 
       },
     }),
@@ -106,6 +105,12 @@ function extraireJson(texte) {
   let nettoye = texte.replace(/```json|```/g, '').trim();
   const matchAccolades = nettoye.match(/\{[\s\S]*\}/);
   let aTraiter = matchAccolades ? matchAccolades[0] : nettoye;
+
+  // Réparation intelligente : ferme l'objet si Gemini a coupé court
+  if (!aTraiter.trim().endsWith('}')) {
+    aTraiter = aTraiter.trim() + '"}'; 
+  }
+
   aTraiter = aTraiter.replace(/,(\s*[}\]])/g, '$1');
 
   try {

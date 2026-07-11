@@ -43,6 +43,7 @@
         }
       ],
       "expo-web-browser",
+      "./plugins/withPorcupineAssets.js",
       "expo-sharing",
       "expo-quick-actions",
       "expo-secure-store",
@@ -63,7 +64,8 @@
             }
           ]
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "android": {
       "permissions": [
@@ -76,7 +78,11 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "FOREGROUND_SERVICE",
+"FOREGROUND_SERVICE_MICROPHONE",
+"POST_NOTIFICATIONS",
+"WAKE_LOCK"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#000000",

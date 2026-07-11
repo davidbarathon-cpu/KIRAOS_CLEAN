@@ -61,6 +61,17 @@ export const WEATHER_PROVIDER = {
   lienCreationCle: 'https://home.openweathermap.org/users/sign_up',
 };
 
+// lot 43 : clé Picovoice, nécessaire pour que Kira écoute son propre nom
+// en permanence (moteur de mot de réveil Porcupine, 100% sur l'appareil).
+export const PICOVOICE_PROVIDER = {
+  id: 'picovoice',
+  nom: 'Picovoice (mot de réveil "Kira")',
+  icon: '🌟',
+  gratuit: true,
+  description: 'Gratuit pour un usage personnel. Nécessaire pour que Kira t\'entende dire son nom, même écran verrouillé.',
+  lienCreationCle: 'https://console.picovoice.ai/',
+};
+
 // ── Fournisseurs de traduction disponibles (plusieurs, l'utilisateur choisit) ──
 export const TRADUCTION_PROVIDERS = [
   {

@@ -30,6 +30,7 @@ import {
   getActualitesProvidersActifs,
   getAllApiKeys,
   KIRA_ICONS,
+  PICOVOICE_PROVIDER,
   removeApiKey,
   setActiveAiProvider,
   setActiveKiraIcon,
@@ -42,6 +43,7 @@ import {
 import { getCustomModules, supprimerCustomModule } from '../utils/customModules';
 import { apparierAvecBridge } from '../utils/driverPhilipsHue';
 import { getFaitsMemorises, oublierFait, oublierTout } from '../utils/kiraMemoire';
+import { demarrerEcoutePermanente, arreterEcoutePermanente, ecoutePermanenteActive } from '../utils/wakeWordService';
 import { deconnecterGoogle, estConnecteAGoogle, getGoogleClientId, setGoogleClientId } from '../utils/googleAuth';
 import {
   annulerParCle,
@@ -84,6 +86,9 @@ export default function ParametresScreen({ navigation }) {
   const [modulesPersonnalises, setModulesPersonnalises] = useState([]);
   const [saved, setSaved] = useState(false);
   const [widgetMsg, setWidgetMsg] = useState(null);
+  const [ecouteActive, setEcouteActive] = useState(false);
+  const [ecouteChargement, setEcouteChargement] = useState(false);
+  const [ecouteMsg, setEcouteMsg] = useState(null);
 
   // ── État spécifique à la section API ──
   const [apiKeys, setApiKeysState] = useState({});
@@ -139,6 +144,7 @@ export default function ParametresScreen({ navigation }) {
       setTraductionProviderActif(await getActiveTraductionProvider());
       setActualitesProvidersActifsState(await getActualitesProvidersActifs());
       setKiraIconActiveState(await getActiveKiraIcon());
+      setEcouteActive(ecoutePermanenteActive());
     })();
   }, []);
 
@@ -319,7 +325,7 @@ export default function ParametresScreen({ navigation }) {
     ['Date de naissance', 'naissance', 'JJ/MM/AAAA'], ['Niveau guitare', 'guitareNiv', 'Débutant / Intermédiaire / Avancé'],
     ['Niveau chant', 'chantNiv', 'Débutant / Intermédiaire'], ['Style musical', 'style', 'Rock, Blues, Pop...'],
     ['Objectif calorique (kcal)', 'calObj', '2200'], ['Objectif sommeil (h)', 'sleepObj', '8'],
-    ['Objectif pas / jour', 'pasObj', '10000'],
+    ['Objectif pas / jour', 'pasObj', '10000'], ['Objectif eau (L)', 'eauObj', '2.5'],
   ];
 
   const renderSection = () => {
@@ -342,7 +348,7 @@ export default function ParametresScreen({ navigation }) {
                 placeholderTextColor="#555566"
                 value={String(profil[key] || '')}
                 onChangeText={t => setProfil({ ...profil, [key]: t })}
-                keyboardType={['calObj', 'sleepObj', 'pasObj'].includes(key) ? 'numeric' : 'default'}
+                keyboardType={['calObj', 'sleepObj', 'pasObj', 'eauObj'].includes(key) ? 'numeric' : 'default'}
               />
             </View>
           ))}
@@ -525,6 +531,43 @@ export default function ParametresScreen({ navigation }) {
             {keySaved === 'openweathermap' && <Text style={styles.savedKeyText}>✅ Clé enregistrée !</Text>}
             <TouchableOpacity onPress={() => ouvrirLien(WEATHER_PROVIDER.lienCreationCle)}>
               <Text style={[styles.lienCreation, { color: accent }]}>🔗 Créer une clé gratuite sur {WEATHER_PROVIDER.nom} →</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ── Picovoice : mot de réveil "Kira" (lot 43) ── */}
+          <SectionLabel style={{ marginTop: 18 }}>🌟 Écoute permanente de Kira</SectionLabel>
+          <View style={[styles.providerCard, { borderColor: apiKeys.picovoice ? PALETTE.green + '35' : 'rgba(255,255,255,0.07)' }]}>
+            <View style={styles.providerHeader}>
+              <Text style={{ fontSize: 20 }}>{PICOVOICE_PROVIDER.icon}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.providerName}>{PICOVOICE_PROVIDER.nom}</Text>
+                <Text style={styles.providerDesc}>{PICOVOICE_PROVIDER.description}</Text>
+              </View>
+              {apiKeys.picovoice && <Text style={styles.connectedTag}>✓ Configuré</Text>}
+            </View>
+            {editingKey === 'picovoice' ? (
+              <View style={styles.editKeyBox}>
+                <TextInput style={styles.keyInput} placeholder="Colle ton AccessKey Picovoice ici..." placeholderTextColor="#555566" value={tempKeyValue} onChangeText={setTempKeyValue} autoCapitalize="none" autoCorrect={false} secureTextEntry />
+                <View style={styles.editKeyActions}>
+                  <TouchableOpacity style={[styles.smallBtn, { backgroundColor: accent }]} onPress={() => sauverCle('picovoice')}><Text style={styles.smallBtnTextDark}>Enregistrer</Text></TouchableOpacity>
+                  <TouchableOpacity style={[styles.smallBtn, { backgroundColor: 'rgba(255,255,255,0.08)' }]} onPress={() => setEditingKey(null)}><Text style={styles.smallBtnText}>Annuler</Text></TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.providerActions}>
+                <TouchableOpacity style={[styles.smallBtn, { backgroundColor: accent + '20', borderColor: accent + '40', borderWidth: 1 }]} onPress={() => commencerEdition('picovoice')}>
+                  <Text style={[styles.smallBtnText, { color: accent }]}>{apiKeys.picovoice ? 'Modifier la clé' : '+ Ajouter mon AccessKey'}</Text>
+                </TouchableOpacity>
+                {apiKeys.picovoice && <TouchableOpacity style={styles.smallBtnDanger} onPress={() => supprimerCle('picovoice')}><Text style={styles.smallBtnDangerText}>Supprimer</Text></TouchableOpacity>}
+              </View>
+            )}
+            {keySaved === 'picovoice' && <Text style={styles.savedKeyText}>✅ Clé enregistrée !</Text>}
+            <Text style={styles.infoSmall}>
+              💡 Active ensuite l'écoute dans l'onglet "🌟 Kira" une fois ta clé enregistrée
+              (et après avoir suivi les étapes du guide d'installation pour créer le mot "Kira").
+            </Text>
+            <TouchableOpacity onPress={() => ouvrirLien(PICOVOICE_PROVIDER.lienCreationCle)}>
+              <Text style={[styles.lienCreation, { color: accent }]}>🔗 Créer un compte gratuit sur Picovoice Console →</Text>
             </TouchableOpacity>
           </View>
 
@@ -899,18 +942,65 @@ export default function ParametresScreen({ navigation }) {
           )}
 
           <SectionLabel style={{ marginTop: 18 }}>Comportement</SectionLabel>
-          {[['Mode proactif (suggestions automatiques)', 'proactif'], ['Voix de Kira (synthèse vocale)', 'voix'], ['Écoute du nom "Kira" (mains libres)', 'micro']].map(([label, key]) => (
+          {[['Mode proactif (suggestions automatiques)', 'proactif'], ['Voix de Kira (synthèse vocale)', 'voix']].map(([label, key]) => (
             <View key={key} style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>{label}</Text>
               <Toggle value={prefs[key] !== false} onChange={v => updatePref(key, v)} color={accent} />
             </View>
           ))}
-          {prefs.micro !== false && (
+
+          {/* ── Écoute permanente du mot "Kira" (lot 43) ── */}
+          <View style={[styles.notifCard, { borderColor: ecouteActive ? PALETTE.green + '35' : 'rgba(255,255,255,0.06)', marginTop: 4 }]}>
+            <View style={styles.notifCardHeader}>
+              <Text style={styles.toggleLabel}>Écoute du nom "Kira" (mains libres)</Text>
+              {ecouteChargement ? (
+                <ActivityIndicator color={accent} size="small" />
+              ) : (
+                <Toggle
+                  value={ecouteActive}
+                  color={accent}
+                  onChange={async v => {
+                    if (v) {
+                      if (!apiKeys.picovoice) {
+                        Alert.alert(
+                          'Clé Picovoice requise',
+                          "Configure d'abord ton AccessKey Picovoice dans l'onglet 🔑 API pour activer l'écoute permanente.",
+                          [{ text: 'Aller aux clés API', onPress: () => setSection('api') }, { text: 'Annuler', style: 'cancel' }]
+                        );
+                        return;
+                      }
+                      setEcouteChargement(true);
+                      const { succes, erreur } = await demarrerEcoutePermanente();
+                      setEcouteChargement(false);
+                      if (succes) {
+                        setEcouteActive(true);
+                        setEcouteMsg('✅ Kira écoute maintenant en permanence.');
+                      } else {
+                        Alert.alert('Impossible de démarrer l\'écoute', erreur || 'Erreur inconnue.');
+                      }
+                    } else {
+                      setEcouteChargement(true);
+                      await arreterEcoutePermanente();
+                      setEcouteChargement(false);
+                      setEcouteActive(false);
+                      setEcouteMsg('Écoute permanente désactivée.');
+                    }
+                    setTimeout(() => setEcouteMsg(null), 3000);
+                  }}
+                />
+              )}
+            </View>
+            {ecouteMsg && <Text style={styles.savedKeyText}>{ecouteMsg}</Text>}
             <Text style={styles.infoSmall}>
-              🚧 L'écoute vocale permanente nécessite un module natif spécifique — ce sera l'un
-              des derniers lots techniques.
+              Kira détecte son nom entièrement sur ton téléphone (aucun son envoyé sur
+              internet). Une notification persistante "🌟 Kira écoute..." reste affichée tant
+              que c'est actif — c'est Android qui l'impose, impossible de la masquer.
+              Consomme plus de batterie qu'à l'habitude sur une journée complète.{'\n\n'}
+              Si le téléphone est verrouillé au moment où tu dis "Kira", Android peut empêcher
+              l'ouverture directe de l'app — une notification apparaît alors à la place, il
+              suffit de taper dessus.
             </Text>
-          )}
+          </View>
           <TouchableOpacity style={[styles.linkToApi, { borderColor: accent + '30' }]} onPress={() => setSection('api')}>
             <Text style={{ color: accent, fontSize: 12, fontWeight: '600' }}>🔑 Configurer les clés API de Kira →</Text>
           </TouchableOpacity>

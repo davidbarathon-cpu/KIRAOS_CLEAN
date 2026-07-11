@@ -22,6 +22,7 @@ import {
 import { Chip, KiraFAB, ModuleCard, ProgressRing, SectionLabel } from '../components/Shared';
 import { analyzeContext, generatePredictions } from '../utils/kiraBrain';
 import { getData } from '../utils/storage';
+import { getSanteDuJour } from '../utils/santeManager';
 import { getTheme, KIRA_STATE_COLORS, KIRA_STATE_LABELS, PALETTE } from '../utils/theme';
 import { getCustomModules, versEntreeModuleAccueil } from '../utils/customModules';
 import { getAllApiKeys } from '../utils/apiKeys';
@@ -92,7 +93,7 @@ export default function HomeScreen({ navigation }) {
 
   const loadData = useCallback(async () => {
     const [s, a, m, customs] = await Promise.all([
-      getData('sante'),
+      getSanteDuJour(),
       getData('agenda'),
       getData('modules_actifs'),
       getCustomModules(),

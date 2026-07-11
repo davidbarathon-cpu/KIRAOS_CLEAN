@@ -1,33 +1,90 @@
 // ═══════════════════════════════════════════
 //  SANTESCREEN.JS — Module Santé
+//  MISE À JOUR LOT 44 (étape 1/2) : données réellement
+//  interactives — ajout d'eau en un geste, saisie manuelle
+//  du poids/sommeil/pas/calories/FC, vrai historique
+//  quotidien, conseils Kira qui varient selon les vraies
+//  données. La connexion Health Connect (récupération
+//  automatique pas/sommeil/FC) viendra à l'étape 2/2.
 // ═══════════════════════════════════════════
 
-import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import ExportPdfModal from '../components/ExportPdfModal';
-import { BackButton, ProgressRing } from '../components/Shared';
-import { getData } from '../utils/storage';
+import { BackButton, ProgressRing, SectionLabel } from '../components/Shared';
+import { ajouterEau, genererConseilSante, getSanteDuJour, mettreAJourSante } from '../utils/santeManager';
 import { getTheme, PALETTE } from '../utils/theme';
+import { refreshKiraWidget } from '../utils/widgetUpdater';
+
+const BOUTONS_EAU = [
+  { label: '+250 ml', litres: 0.25 },
+  { label: '+500 ml', litres: 0.5 },
+];
 
 export default function SanteScreen({ navigation }) {
   const theme = getTheme('cosmos');
   const [sante, setSante] = useState({});
   const [showExport, setShowExport] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({});
+  const [ajoutEauEnCours, setAjoutEauEnCours] = useState(false);
 
-  useEffect(() => {
-    getData('sante').then(s => setSante(s || {}));
+  const charger = useCallback(async () => {
+    const data = await getSanteDuJour();
+    setSante(data);
   }, []);
+
+  useFocusEffect(useCallback(() => { charger(); }, [charger]));
+
+  const boireEau = async litres => {
+    setAjoutEauEnCours(true);
+    await ajouterEau(litres);
+    await charger();
+    refreshKiraWidget();
+    setAjoutEauEnCours(false);
+  };
+
+  const ouvrirEdition = () => {
+    setForm({
+      pas: String(sante.pas ?? 0),
+      cal: String(sante.cal ?? 0),
+      fc: String(sante.fc ?? ''),
+      poids: String(sante.poids ?? ''),
+      som: String(sante.som ?? ''),
+    });
+    setEditing(true);
+  };
+
+  const enregistrerEdition = async () => {
+    await mettreAJourSante({
+      pas: parseInt(form.pas, 10) || 0,
+      cal: parseInt(form.cal, 10) || 0,
+      fc: parseInt(form.fc, 10) || null,
+      poids: parseFloat(form.poids.replace(',', '.')) || null,
+      som: parseFloat(form.som.replace(',', '.')) || 0,
+    });
+    setEditing(false);
+    await charger();
+    refreshKiraWidget();
+  };
 
   const d = sante;
   const imc = d.poids ? (d.poids / 1.72 / 1.72).toFixed(1) : '?';
+  const conseil = genererConseilSante(d, d.historique || []);
+  const historique7j = (d.historique || []).slice(-7);
+  const maxPasHistorique = Math.max(d.oP || 10000, ...historique7j.map(h => h.pas || 0), 1);
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
       <View style={[styles.header, { borderColor: theme.border }]}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>❤️ Santé</Text>
+        <TouchableOpacity onPress={ouvrirEdition} style={styles.exportBtn}>
+          <Text style={{ fontSize: 13 }}>✏️ Modifier</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => setShowExport(true)} style={styles.exportBtn}>
-          <Text style={{ fontSize: 13 }}>📄 Exporter</Text>
+          <Text style={{ fontSize: 13 }}>📄</Text>
         </TouchableOpacity>
       </View>
 
@@ -49,6 +106,20 @@ export default function SanteScreen({ navigation }) {
             <ProgressRing value={d.eau || 0} max={d.oEau || 2.5} color={PALETTE.teal} size={70} label={`${d.eau || 0}L`} />
             <Text style={styles.ringCaption}>Eau</Text>
           </View>
+        </View>
+
+        {/* Ajout rapide d'eau — l'action la plus fréquente, en un geste */}
+        <View style={styles.eauRow}>
+          {BOUTONS_EAU.map(b => (
+            <TouchableOpacity
+              key={b.label}
+              style={[styles.eauBtn, { borderColor: PALETTE.teal + '40', backgroundColor: PALETTE.teal + '15' }]}
+              onPress={() => boireEau(b.litres)}
+              disabled={ajoutEauEnCours}
+            >
+              <Text style={{ color: PALETTE.teal, fontWeight: '700', fontSize: 13 }}>💧 {b.label}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         <View style={[styles.statCard, { borderColor: PALETTE.pink + '30' }]}>
@@ -78,12 +149,69 @@ export default function SanteScreen({ navigation }) {
 
         <View style={[styles.coachCard, { borderColor: theme.accent + '30', backgroundColor: theme.accent + '10' }]}>
           <Text style={[styles.coachTitle, { color: PALETTE.violet }]}>🌟 Kira Coach Santé</Text>
-          <Text style={styles.coachText}>
-            Sommeil à {d.som || '?'}h → couche-toi avant 22h30 ce soir. Avant le sport : banane 45
-            min avant + étirements 10 min après !
-          </Text>
+          <Text style={styles.coachText}>{conseil}</Text>
         </View>
+
+        {/* Historique — se remplit jour après jour à partir de maintenant */}
+        <SectionLabel style={{ marginTop: 18 }}>7 derniers jours</SectionLabel>
+        {historique7j.length === 0 ? (
+          <View style={styles.emptyHistBox}>
+            <Text style={styles.emptyHistText}>
+              Ton historique se construit au fil des jours. Reviens demain — la journée
+              d'aujourd'hui apparaîtra ici automatiquement !
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.histBox}>
+            {historique7j.map((h, i) => (
+              <View key={i} style={styles.histRow}>
+                <Text style={styles.histDay}>{h.date}</Text>
+                <View style={styles.histBarTrack}>
+                  <View style={[styles.histBarFill, { width: `${Math.min((h.pas / maxPasHistorique) * 100, 100)}%` }]} />
+                </View>
+                <Text style={styles.histValue}>{Math.round((h.pas || 0) / 1000)}k</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
+
+      {editing && (
+        <View style={styles.editOverlay}>
+          <View style={[styles.editModal, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={styles.editTitle}>✏️ Mettre à jour mes données</Text>
+
+            {[
+              ['pas', 'Pas aujourd\'hui'],
+              ['cal', 'Calories brûlées (kcal)'],
+              ['fc', 'Fréquence cardiaque (bpm)'],
+              ['poids', 'Poids (kg)'],
+              ['som', 'Sommeil cette nuit (h)'],
+            ].map(([key, label]) => (
+              <View key={key} style={{ marginBottom: 10 }}>
+                <Text style={styles.fieldLabel}>{label}</Text>
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  placeholder="—"
+                  placeholderTextColor="#555566"
+                  value={form[key]}
+                  onChangeText={t => setForm({ ...form, [key]: t })}
+                />
+              </View>
+            ))}
+
+            <View style={styles.editActions}>
+              <TouchableOpacity style={[styles.editBtn, { backgroundColor: theme.accent }]} onPress={enregistrerEdition}>
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Enregistrer</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.editBtn, { backgroundColor: 'rgba(255,255,255,0.08)' }]} onPress={() => setEditing(false)}>
+                <Text style={{ color: '#888899', fontSize: 13 }}>Annuler</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
 
       <ExportPdfModal visible={showExport} onClose={() => setShowExport(false)} type="sante" />
     </View>
@@ -95,7 +223,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     paddingTop: 50,
     paddingHorizontal: 16,
     paddingBottom: 14,
@@ -112,6 +240,8 @@ const styles = StyleSheet.create({
   },
   ringBox: { alignItems: 'center', width: '22%' },
   ringCaption: { fontSize: 9, color: '#555566', marginTop: 5 },
+  eauRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  eauBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, alignItems: 'center' },
   statCard: {
     backgroundColor: 'rgba(255,101,132,0.08)',
     borderRadius: 14,
@@ -137,4 +267,34 @@ const styles = StyleSheet.create({
   coachCard: { borderRadius: 14, padding: 13, borderWidth: 1 },
   coachTitle: { fontSize: 11, fontWeight: '600', marginBottom: 6 },
   coachText: { fontSize: 12, color: '#ccccdd', lineHeight: 18 },
+  emptyHistBox: { padding: 16, backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 14 },
+  emptyHistText: { fontSize: 12, color: '#666677', lineHeight: 18, textAlign: 'center' },
+  histBox: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 14 },
+  histRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  histDay: { width: 42, fontSize: 10, color: '#666677' },
+  histBarTrack: { flex: 1, height: 6, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 99, overflow: 'hidden' },
+  histBarFill: { height: '100%', backgroundColor: PALETTE.blue, borderRadius: 99 },
+  histValue: { width: 32, fontSize: 10, color: '#aab', textAlign: 'right' },
+  editOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  editModal: { width: '100%', borderRadius: 18, padding: 18, borderWidth: 1 },
+  editTitle: { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 14 },
+  fieldLabel: { fontSize: 10, color: '#888899', marginBottom: 4 },
+  input: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 9,
+    color: '#fff',
+    fontSize: 13,
+    padding: 10,
+  },
+  editActions: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  editBtn: { flex: 1, padding: 12, borderRadius: 10, alignItems: 'center' },
 });

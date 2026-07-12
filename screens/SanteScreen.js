@@ -58,8 +58,9 @@ export default function SanteScreen({ navigation }) {
     setHcSyncEnCours(true);
     const { succes, erreur } = await connecterHealthConnect();
     setHcSyncEnCours(false);
-    if (!succes && erreur === 'NON_INSTALLE') {
+    if (!succes && (erreur === 'NON_INSTALLE' || erreur === 'A_METTRE_A_JOUR')) {
       ouvrirInstallationHealthConnect();
+      setHcErreur(erreur === 'A_METTRE_A_JOUR' ? 'Health Connect (Santé Connect) doit être mis à jour depuis le Play Store.' : null);
       return;
     }
     if (succes) await charger();

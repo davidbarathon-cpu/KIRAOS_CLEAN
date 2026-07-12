@@ -735,16 +735,17 @@ export default function ParametresScreen({ navigation }) {
           </View>
 
           {/* ── Health Connect (lot 45 — pas de clé, juste une autorisation système) ── */}
-          <SectionLabel style={{ marginTop: 18 }}>🏃 Health Connect (Fitbit, Garmin, Samsung Health...)</SectionLabel>
+          <SectionLabel style={{ marginTop: 18 }}>🏃 Health Connect / Santé Connect (Fitbit, Garmin, Renpho...)</SectionLabel>
           <View style={[styles.providerCard, { borderColor: hcConnecte ? PALETTE.green + '35' : 'rgba(255,255,255,0.07)' }]}>
             <View style={styles.providerHeader}>
               <Text style={{ fontSize: 20 }}>🏃</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.providerName}>Health Connect</Text>
+                <Text style={styles.providerName}>Health Connect (nommé "Santé Connect" en français)</Text>
                 <Text style={styles.providerDesc}>
-                  L'app santé centrale d'Android. Si Fitbit, Garmin Connect, Samsung Health ou
-                  une autre app y écrit déjà tes données (à activer une fois dans CETTE app-là),
-                  Kira les récupère automatiquement — sans intégration séparée par marque.
+                  L'app santé centrale d'Android — même éditeur (Google), juste un nom traduit.
+                  Si Fitbit, Garmin Connect, Samsung Health, ou l'app de ta montre/balance y
+                  écrit déjà tes données (à activer une fois dans CETTE app-là, dans ses propres
+                  réglages), Kira les récupère automatiquement.
                 </Text>
               </View>
               {hcConnecte && <Text style={styles.connectedTag}>✓ Connecté</Text>}
@@ -761,11 +762,22 @@ export default function ParametresScreen({ navigation }) {
                     const { succes, erreur } = await connecterHealthConnect();
                     if (!succes && erreur === 'NON_INSTALLE') {
                       Alert.alert(
-                        'Health Connect non installé',
-                        "Installe l'app Health Connect (gratuite, éditée par Google) depuis le Play Store, puis reviens ici.",
+                        'Santé Connect non installé',
+                        "Installe l'app Santé Connect (Health Connect, gratuite, éditée par Google) depuis le Play Store, puis reviens ici.",
                         [{ text: 'Ouvrir le Play Store', onPress: ouvrirInstallationHealthConnect }, { text: 'Annuler', style: 'cancel' }]
                       );
                       return;
+                    }
+                    if (!succes && erreur === 'A_METTRE_A_JOUR') {
+                      Alert.alert(
+                        'Mise à jour requise',
+                        "Santé Connect est installé mais doit être mis à jour depuis le Play Store avant de pouvoir être utilisé.",
+                        [{ text: 'Ouvrir le Play Store', onPress: ouvrirInstallationHealthConnect }, { text: 'Annuler', style: 'cancel' }]
+                      );
+                      return;
+                    }
+                    if (!succes) {
+                      Alert.alert('Connexion impossible', erreur || 'Erreur inconnue.');
                     }
                     setHcConnecteState(succes);
                   }}
@@ -775,9 +787,12 @@ export default function ParametresScreen({ navigation }) {
               )}
             </View>
             <Text style={styles.infoSmall}>
-              💡 Pense à vérifier dans Fitbit/Garmin/Samsung Health (Réglages → Health Connect
-              ou Synchronisation) que le partage vers Health Connect est bien activé — c'est un
-              réglage propre à chaque app, Kira ne peut pas l'activer à leur place.
+              💡 Pense à vérifier dans l'app de ta montre/balance/tracker (Réglages →
+              "Health Connect" ou "Synchronisation") que le partage vers Health Connect est
+              bien activé — c'est un réglage propre à chaque app, Kira ne peut pas l'activer à
+              leur place. Certaines apps de marques génériques (ex: DeepFit) ne proposent pas
+              toujours cette option — si elle est absente dans les réglages de ton app, il n'y a
+              malheureusement pas de solution de contournement simple de notre côté.
             </Text>
           </View>
 

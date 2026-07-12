@@ -3,6 +3,7 @@
     "name": "KiraOS_Clean",
     "slug": "kiraosclean",
     "version": "1.0.0",
+    "scheme": "kiraosclean",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

@@ -16,6 +16,8 @@ import {
   initialize,
   requestPermission,
   getGrantedPermissions,
+  getSdkStatus,
+  SdkAvailabilityStatus,
   readRecords,
 } from 'react-native-health-connect';
 
@@ -37,17 +39,39 @@ function extraireNombre(...chemins) {
   return null;
 }
 
-export async function healthConnectDisponible() {
-  if (Platform.OS !== 'android') return false;
+/**
+ * Retourne 'disponible' | 'a_installer' | 'a_mettre_a_jour' | 'indisponible'.
+ * ⚠️ Correction lot 47 : la version précédente se contentait d'appeler
+ * initialize() et considérait tout échec comme "non installé", ce qui
+ * était trompeur (Health Connect/Santé Connect peut être installé mais
+ * dans un état différent — SDK à mettre à jour, ou simplement pas encore
+ * initialisé). On utilise maintenant getSdkStatus(), la fonction prévue
+ * précisément pour ce diagnostic.
+ */
+export async function statutHealthConnect() {
+  if (Platform.OS !== 'android') return 'indisponible';
   try {
-    return await initialize();
-  } catch {
-    return false;
+    const status = await getSdkStatus();
+    if (status === SdkAvailabilityStatus.SDK_AVAILABLE) return 'disponible';
+    if (status === SdkAvailabilityStatus.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) return 'a_mettre_a_jour';
+    return 'a_installer';
+  } catch (e) {
+    console.warn('Erreur statutHealthConnect', e.message);
+    return 'indisponible';
   }
 }
 
+export async function healthConnectDisponible() {
+  return (await statutHealthConnect()) === 'disponible';
+}
+
 export function ouvrirInstallationHealthConnect() {
-  Linking.openURL('https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata').catch(() => {});
+  // "market://" ouvre directement l'app Play Store (plus fiable que le
+  // lien web sur certains appareils) ; on retombe sur le lien web si
+  // le Play Store natif n'est pas disponible.
+  Linking.openURL('market://details?id=com.google.android.apps.healthdata').catch(() => {
+    Linking.openURL('https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata').catch(() => {});
+  });
 }
 
 export async function estConnecteAHealthConnect() {
@@ -64,12 +88,25 @@ export async function connecterHealthConnect() {
     return { succes: false, erreur: 'Disponible uniquement sur Android.' };
   }
 
-  const disponible = await healthConnectDisponible();
-  if (!disponible) {
+  const statut = await statutHealthConnect();
+  if (statut === 'a_installer') {
     return { succes: false, erreur: 'NON_INSTALLE' };
+  }
+  if (statut === 'a_mettre_a_jour') {
+    return { succes: false, erreur: 'A_METTRE_A_JOUR' };
+  }
+  if (statut !== 'disponible') {
+    return { succes: false, erreur: 'Health Connect indisponible sur cet appareil.' };
   }
 
   try {
+    // ⚠️ Bug corrigé au lot 47 : il manquait cet appel à initialize()
+    // avant requestPermission(). Sans lui, la demande de permission
+    // échouait silencieusement et Kira OS n'apparaissait jamais dans la
+    // liste des apps autorisées de Santé Connect, même après avoir
+    // accepté l'écran (qui, en réalité, ne s'affichait jamais).
+    await initialize();
+
     const accordees = await requestPermission(PERMISSIONS_DEMANDEES);
     if (!accordees || accordees.length === 0) {
       return { succes: false, erreur: 'Aucune permission accordée.' };
@@ -104,6 +141,10 @@ export async function synchroniserDepuisHealthConnect() {
   if (!disponible) return { succes: false, erreur: 'NON_INSTALLE', sante: null };
 
   try {
+    // Même remarque : initialize() doit être (re)appelé ici aussi, l'état
+    // natif ne survit pas forcément entre deux ouvertures de l'app.
+    await initialize();
+
     const granted = await getGrantedPermissions();
     const aAcces = type => granted.some(p => p.recordType === type);
 

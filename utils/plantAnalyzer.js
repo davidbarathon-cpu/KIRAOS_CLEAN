@@ -1,5 +1,23 @@
 // ═══════════════════════════════════════════
-// PLANTANALYZER.JS — Analyse de plante par IA
+//  PLANTANALYZER.JS — Analyse de plante par IA
+//  Utilise le fournisseur IA actif de Kira
+//  (Gemini ou Claude, les deux seuls supportant
+//  bien l'analyse d'image dans notre sélection).
+//  Si Mistral ou OpenAI sont actifs, ou si aucun
+//  fournisseur n'est configuré, on prévient
+//  clairement l'utilisateur plutôt que d'échouer
+//  silencieusement.
+//
+//  CORRECTIF LOT 39 (ré-appliqué — absent du test du
+//  28/06 malgré une livraison précédente identique) :
+//  la conversion image → base64 utilisait fetch(uri)
+//  .blob() puis FileReader.readAsDataURL(), qui ne
+//  fonctionne plus sur le moteur Hermes utilisé par
+//  Expo SDK 56+ ("Creating blobs from 'ArrayBuffer'
+//  and 'ArrayBufferView' are not supported"). Remplacé
+//  par la classe File d'expo-file-system (stable
+//  depuis le SDK 54), qui lit directement le fichier
+//  en base64 sans jamais passer par un Blob.
 // ═══════════════════════════════════════════
 
 import { File } from 'expo-file-system';
@@ -8,25 +26,29 @@ const PROVIDERS_COMPATIBLES_IMAGE = ['gemini', 'claude'];
 
 const PROMPT_ANALYSE = `Tu es Kira, assistante jardinage experte. Analyse cette photo de plante.
 
-CRUCIAL : Tu DOIS répondre UNIQUEMENT avec un objet JSON complet, commençant par '{' et se terminant par '}'.
-N'inclus AUCUN texte avant ou après, pas de markdown, pas de commentaires.
+Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre : pas de texte avant ou après, pas de balises markdown, pas de commentaires.
 
-Structure exacte à respecter :
-{
-  "type_plante": "Nom",
-  "etat_sante": "Excellent" | "Bon" | "Moyen" | "Préoccupant",
-  "score_sante": 0-100,
-  "besoin_eau": "Faible" | "Modéré" | "Élevé" | "Urgent",
-  "observations": "Texte explicatif sans guillemets doubles",
-  "conseil_principal": "Conseil court sans guillemets doubles",
-  "conseils_secondaires": ["Conseil 1", "Conseil 2"]
-}
+Voici un EXEMPLE de réponse valide (remplace les valeurs par ta vraie analyse, mais garde exactement cette structure et ce format) :
 
-Règles :
-1. "score_sante" est un nombre, sans guillemets.
-2. Interdiction d'utiliser des guillemets doubles (") à l'intérieur des textes — utilise des guillemets simples ou reformule.
-3. Le JSON doit être valide et fermé par une accolade finale '}'.`;
+{"type_plante": "Tomate cerise", "etat_sante": "Bon", "score_sante": 85, "besoin_eau": "Modéré", "observations": "Les feuilles sont vert vif sans signe de stress visible. Quelques taches jaunes sur les feuilles basses, normal a ce stade.", "conseil_principal": "Arrose le sol reste legerement humide, attends encore un jour.", "conseils_secondaires": ["Surveille les feuilles basses", "Apporte de l'engrais dans 2 semaines"]}
 
+Règles STRICTES à respecter pour que ta réponse soit lisible par un programme :
+- "etat_sante" doit valoir EXACTEMENT une seule de ces 4 valeurs : Excellent, Bon, Moyen, Préoccupant
+- "besoin_eau" doit valoir EXACTEMENT une seule de ces 4 valeurs : Faible, Modéré, Élevé, Urgent
+- "score_sante" est un nombre entier entre 0 et 100, sans guillemets autour
+- N'utilise JAMAIS de guillemets doubles (") à l'intérieur des textes de "observations", "conseil_principal" ou des éléments de "conseils_secondaires" — utilise des guillemets simples ou reformule sans guillemets
+- N'ajoute aucune virgule après le dernier élément d'une liste ou d'un objet
+- Pour "type_plante" : donne TOUJOURS ta meilleure estimation, même approximative (ex: "Probablement un plant de tomate", ou juste la famille "Plante grasse" si tu n'es pas sûr à 100%). Un nom probable est bien plus utile qu'un refus. Ne réponds "Non identifiée" qu'en tout dernier recours, uniquement si la photo ne montre vraiment aucun végétal reconnaissable.
+- "conseils_secondaires" contient exactement 2 courtes phrases sous forme de liste`;
+
+/**
+ * Convertit une URI locale d'image (fournie par expo-image-picker) en base64,
+ * nécessaire pour l'envoyer aux API Gemini/Claude.
+ * Utilise la classe File (API moderne expo-file-system, stable depuis le
+ * SDK 54) qui lit directement le contenu en base64, sans passer par Blob
+ * ni FileReader — ces derniers ne fonctionnent plus de façon fiable sur le
+ * moteur Hermes des versions récentes de React Native.
+ */
 async function imageUriEnBase64(uri) {
   const file = new File(uri);
   return file.base64();
@@ -48,11 +70,7 @@ async function analyserAvecGemini(imageBase64, apiKey, modele = 'gemini-2.5-flas
           ],
         },
       ],
-      generationConfig: { 
-        temperature: 0.4, 
-        maxOutputTokens: 500,
-        responseMimeType: "application/json" 
-      },
+      generationConfig: { temperature: 0.4, maxOutputTokens: 500 },
     }),
   });
 
@@ -101,32 +119,51 @@ async function analyserAvecClaude(imageBase64, apiKey, modele = 'claude-3-5-haik
   return texte;
 }
 
+/**
+ * Extrait le JSON de la réponse texte de l'IA, même si elle a ajouté
+ * du texte ou des balises markdown autour (```json ... ```) malgré la consigne.
+ *
+ * MISE À JOUR LOT 35 : ajoute un nettoyage des erreurs de syntaxe les plus
+ * fréquentes que les IA introduisent malgré les consignes (virgules finales
+ * avant une accolade/crochet fermant), et propage le texte brut reçu dans
+ * le message d'erreur en cas d'échec — avant cette mise à jour, l'erreur
+ * "JSON Parse error" ne donnait aucune piste pour comprendre ce qui avait
+ * réellement été reçu de l'IA.
+ */
 function extraireJson(texte) {
   let nettoye = texte.replace(/```json|```/g, '').trim();
   const matchAccolades = nettoye.match(/\{[\s\S]*\}/);
   let aTraiter = matchAccolades ? matchAccolades[0] : nettoye;
 
-  // Réparation intelligente : ferme l'objet si Gemini a coupé court
-  if (!aTraiter.trim().endsWith('}')) {
-    aTraiter = aTraiter.trim() + '"}'; 
-  }
-
+  // Retire les virgules finales avant une accolade ou un crochet fermant
+  // (ex: `"a": 1, }` ou `["x", "y",]`), erreur fréquente des modèles IA
+  // que Hermes (le moteur JS d'Android) refuse plus strictement que d'autres
+  // environnements JavaScript.
   aTraiter = aTraiter.replace(/,(\s*[}\]])/g, '$1');
 
   try {
     return JSON.parse(aTraiter);
   } catch (e) {
+    // Message enrichi avec un extrait du texte réellement reçu, pour
+    // pouvoir diagnostiquer la prochaine fois si le problème se reproduit
+    // (au lieu d'un message générique impossible à investiguer).
     const extrait = aTraiter.length > 300 ? `${aTraiter.slice(0, 300)}…` : aTraiter;
     throw new Error(`${e.message} — réponse reçue de l'IA : ${extrait}`);
   }
 }
 
+/**
+ * Point d'entrée principal : analyse une photo de plante.
+ * imageUri = URI locale renvoyée par expo-image-picker
+ * providerActif = 'gemini' | 'claude' | 'mistral' | 'openai' | null
+ * Retourne { resultat, erreur } — resultat est null en cas d'échec.
+ */
 export async function analyserPlante(imageUri, providerActif, apiKey, modele) {
   if (!providerActif || !apiKey) {
     return {
       resultat: null,
       erreur: 'AUCUN_PROVIDER',
-      message: "Configure d'abord un fournisseur IA dans Paramètres → 🔑 API.",
+      message: "Configure d'abord un fournisseur IA (Gemini ou Claude) dans Paramètres → 🔑 API, puis active-le pour Kira.",
     };
   }
 
@@ -134,7 +171,7 @@ export async function analyserPlante(imageUri, providerActif, apiKey, modele) {
     return {
       resultat: null,
       erreur: 'PROVIDER_INCOMPATIBLE',
-      message: "Utilise Gemini ou Claude pour l'analyse d'image.",
+      message: `${providerActif === 'mistral' ? 'Mistral' : 'OpenAI (modèle mini)'} ne gère pas bien l'analyse d'image dans notre configuration. Bascule temporairement sur Gemini ou Claude dans Paramètres → 🔑 API pour analyser tes plantes.`,
     };
   }
 
@@ -156,3 +193,4 @@ export async function analyserPlante(imageUri, providerActif, apiKey, modele) {
 }
 
 export { PROVIDERS_COMPATIBLES_IMAGE };
+

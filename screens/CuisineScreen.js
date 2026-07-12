@@ -12,23 +12,26 @@ export default function CuisineScreen({ navigation }) {
   const [recettes, setRecettes] = useState([]);
   const [recipeIdx, setRecipeIdx] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [regenerationEnCours, setRegenerationEnCours] = useState(false);
   const [sourceIA, setSourceIA] = useState(null);
 
-  const charger = useCallback(async () => {
-    setLoading(true);
+  const charger = useCallback(async (forcerRegeneration = false) => {
+    if (forcerRegeneration) setRegenerationEnCours(true);
+    else setLoading(true);
     try {
       const [sante, agenda, profil, keys, provider] = await Promise.all([
         getData('sante'), getData('agenda'), getData('profil'),
         getAllApiKeys(), getActiveAiProvider(),
       ]);
       const appState = { sante: sante || {}, agenda: agenda || [], profil: profil || {}, kiraState: 'flow' };
-      const { recettes: r, source } = await getRecettesDuJour(appState, provider, keys || {});
+      const { recettes: r, source } = await getRecettesDuJour(appState, provider, keys || {}, forcerRegeneration);
       setRecettes(r || []);
       setSourceIA(source);
     } catch (e) {
       console.warn('Erreur chargement recettes:', e);
     }
     setLoading(false);
+    setRegenerationEnCours(false);
   }, []);
 
   useFocusEffect(useCallback(() => { charger(); }, [charger]));
@@ -51,7 +54,10 @@ export default function CuisineScreen({ navigation }) {
       <View style={[styles.root, { backgroundColor: theme.bg }]}>
         <View style={[styles.header, { borderColor: theme.border }]}>
           <BackButton onPress={() => setRecipeIdx(null)} />
-          <Text style={styles.headerTitle} numberOfLines={1}>{r.titre}</Text>
+          <View style={{ flex: 1 }}>
+            {r.type && <Text style={styles.typeLabel}>{r.type.toUpperCase()}</Text>}
+            <Text style={styles.headerTitle} numberOfLines={1}>{r.titre}</Text>
+          </View>
         </View>
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
           <View style={styles.metaRow}>
@@ -113,7 +119,10 @@ export default function CuisineScreen({ navigation }) {
         {recettes.map((r, i) => (
           <TouchableOpacity key={i} style={[styles.recetteCard, { borderColor: theme.accent + '22' }]} onPress={() => setRecipeIdx(i)}>
             <View style={styles.recetteHeader}>
-              <Text style={styles.recetteTitre}>{r.titre}</Text>
+              <View style={{ flex: 1 }}>
+                {r.type && <Text style={styles.typeLabelSmall}>{r.type.toUpperCase()}</Text>}
+                <Text style={styles.recetteTitre}>{r.titre}</Text>
+              </View>
               <Text style={{ color: '#666', fontSize: 10 }}>→</Text>
             </View>
             <View style={styles.recetteMeta}>
@@ -123,8 +132,16 @@ export default function CuisineScreen({ navigation }) {
             </View>
           </TouchableOpacity>
         ))}
-        <TouchableOpacity style={[styles.refreshBtn, { borderColor: theme.accent + '44' }]} onPress={charger}>
-          <Text style={{ color: theme.accent, fontSize: 12 }}>🔄 Nouvelles recettes</Text>
+        <TouchableOpacity
+          style={[styles.refreshBtn, { borderColor: theme.accent + '44' }]}
+          onPress={() => charger(true)}
+          disabled={regenerationEnCours}
+        >
+          {regenerationEnCours ? (
+            <ActivityIndicator color={theme.accent} size="small" />
+          ) : (
+            <Text style={{ color: theme.accent, fontSize: 12 }}>🔄 Nouvelles recettes</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -135,6 +152,8 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 50, paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: 1 },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#fff', flex: 1 },
+  typeLabel: { fontSize: 10, fontWeight: '700', color: PALETTE.orange, letterSpacing: 1, marginBottom: 2 },
+  typeLabelSmall: { fontSize: 9, fontWeight: '700', color: PALETTE.orange, letterSpacing: 0.8, marginBottom: 3 },
   metaRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   metaChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 99 },
   ingRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 },

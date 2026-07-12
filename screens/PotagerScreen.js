@@ -1,31 +1,32 @@
 // ═══════════════════════════════════════════
 //  POTAGERSCREEN.JS — Module Potager
-//  MISE À JOUR LOT 9 : prise de photo réelle
-//  (expo-image-picker, caméra ou galerie) +
-//  analyse de plante par IA (Gemini/Claude).
+//  MISE À JOUR LOT 47 : corrige les retours du 11/07 —
+//  1) impossible de renommer une plante mal reconnue par l'IA
+//     → champ modifiable avant d'ajouter au suivi.
+//  2) impossible de supprimer une plante suivie → bouton 🗑 ajouté.
+//  3) pas de vrai historique par plante (un seul "dernière analyse"
+//     écrasé à chaque fois) → tableau d'historique complet, un
+//     appui sur une plante affiche toutes ses analyses passées.
+//  4) prompt d'analyse rendu plus tolérant (encourage une estimation
+//     même en cas de doute plutôt que de répondre "Non identifiée").
 // ═══════════════════════════════════════════
 
-import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+  Alert, Image, ScrollView, StyleSheet, Text,
+  TextInput, TouchableOpacity, View,
 } from 'react-native';
-import { BackButton, Chip, SectionLabel } from '../components/Shared';
-import { AI_PROVIDERS, getActiveAiProvider, getAllApiKeys } from '../utils/apiKeys';
-import { analyserPlante } from '../utils/plantAnalyzer';
-import { getData, setData } from '../utils/storage';
+import * as ImagePicker from 'expo-image-picker';
 import { getTheme, PALETTE } from '../utils/theme';
+import { getData, setData } from '../utils/storage';
+import { getAllApiKeys, getActiveAiProvider, AI_PROVIDERS } from '../utils/apiKeys';
+import { analyserPlante } from '../utils/plantAnalyzer';
+import { BackButton, Chip, SectionLabel } from '../components/Shared';
 
 const DEFAULT_PLANTES = [
-  { id: 1, n: 'Tomates', icon: '🍅', eau: 'Élevé', prochain: 'Ce soir', c: PALETTE.pink, derniereAnalyse: null },
-  { id: 2, n: 'Carottes', icon: '🥕', eau: 'Moyen', prochain: 'Demain', c: '#F97316', derniereAnalyse: null },
-  { id: 3, n: 'Herbes aromatiques', icon: '🌿', eau: 'Faible', prochain: 'Dans 2j', c: PALETTE.green, derniereAnalyse: null },
+  { id: 1, n: 'Tomates', icon: '🍅', eau: 'Élevé', prochain: 'Ce soir', c: PALETTE.pink, historique: [] },
+  { id: 2, n: 'Carottes', icon: '🥕', eau: 'Moyen', prochain: 'Demain', c: '#F97316', historique: [] },
+  { id: 3, n: 'Herbes aromatiques', icon: '🌿', eau: 'Faible', prochain: 'Dans 2j', c: PALETTE.green, historique: [] },
 ];
 
 const COULEUR_ETAT = {
@@ -42,6 +43,19 @@ const COULEUR_EAU = {
   Urgent: PALETTE.pink,
 };
 
+/**
+ * Migration douce : les plantes enregistrées avant le lot 47 avaient
+ * "derniereAnalyse"/"derniereScore" au lieu d'un vrai tableau
+ * "historique" — on les convertit à la volée pour ne rien perdre.
+ */
+function migrerPlante(p) {
+  if (p.historique) return p;
+  const historique = p.derniereAnalyse
+    ? [{ date: p.derniereAnalyse, score: p.derniereScore ?? null, etatSante: null, besoinEau: p.eau, observations: null, conseilPrincipal: null }]
+    : [];
+  return { ...p, historique };
+}
+
 export default function PotagerScreen({ navigation }) {
   const theme = getTheme('cosmos');
   const [plantes, setPlantes] = useState([]);
@@ -49,11 +63,19 @@ export default function PotagerScreen({ navigation }) {
   const [photoUri, setPhotoUri] = useState(null);
   const [analysing, setAnalysing] = useState(false);
   const [resultat, setResultat] = useState(null);
+  const [nomEdite, setNomEdite] = useState('');
   const [erreurAnalyse, setErreurAnalyse] = useState(null);
   const [providerActif, setProviderActif] = useState(null);
+  const [planteCibleId, setPlanteCibleId] = useState(null); // null = nouvelle plante, sinon on complète l'historique d'une plante existante
+  const [planteOuverte, setPlanteOuverte] = useState(null); // plante dont on affiche l'historique complet
+  const [showAjoutManuel, setShowAjoutManuel] = useState(false);
+  const [nomManuel, setNomManuel] = useState('');
 
   useEffect(() => {
-    getData('potager_plantes').then(p => setPlantes(p && p.length ? p : DEFAULT_PLANTES));
+    getData('potager_plantes').then(p => {
+      const liste = p && p.length ? p.map(migrerPlante) : DEFAULT_PLANTES;
+      setPlantes(liste);
+    });
     getActiveAiProvider().then(setProviderActif);
   }, []);
 
@@ -62,40 +84,28 @@ export default function PotagerScreen({ navigation }) {
     await setData('potager_plantes', list);
   };
 
-  // ── Demande la permission et ouvre la caméra ──
-  const prendrePhoto = async () => {
+  const prendrePhoto = async cibleId => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission refusée', "Autorise l'accès à la caméra dans les réglages Android pour utiliser cette fonctionnalité.");
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.6, // compression pour limiter la taille envoyée à l'IA
-      base64: false,
-    });
-    if (!result.canceled && result.assets?.[0]) {
-      demarrerAnalyse(result.assets[0].uri);
-    }
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8, base64: false });
+    if (!result.canceled && result.assets?.[0]) demarrerAnalyse(result.assets[0].uri, cibleId);
   };
 
-  // ── Alternative : choisir une photo existante dans la galerie ──
-  const choisirDansGalerie = async () => {
+  const choisirDansGalerie = async cibleId => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission refusée', "Autorise l'accès aux photos dans les réglages Android pour utiliser cette fonctionnalité.");
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.6,
-    });
-    if (!result.canceled && result.assets?.[0]) {
-      demarrerAnalyse(result.assets[0].uri);
-    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    if (!result.canceled && result.assets?.[0]) demarrerAnalyse(result.assets[0].uri, cibleId);
   };
 
-  const demarrerAnalyse = async uri => {
+  const demarrerAnalyse = async (uri, cibleId = null) => {
+    setPlanteCibleId(cibleId);
     setPhotoUri(uri);
     setResultat(null);
     setErreurAnalyse(null);
@@ -114,23 +124,52 @@ export default function PotagerScreen({ navigation }) {
       setErreurAnalyse(message);
     } else {
       setResultat(res);
+      setNomEdite(cibleId ? plantes.find(p => p.id === cibleId)?.n || res.type_plante : res.type_plante);
     }
   };
 
   const enregistrerDansSuivi = () => {
     if (!resultat) return;
-    const nouvellePlante = {
-      id: Date.now(),
-      n: resultat.type_plante,
-      icon: '🌿',
-      eau: resultat.besoin_eau,
-      prochain: resultat.besoin_eau === 'Urgent' ? 'Maintenant !' : resultat.besoin_eau === 'Élevé' ? 'Ce soir' : 'Dans 2-3 jours',
-      c: COULEUR_EAU[resultat.besoin_eau] || PALETTE.green,
-      derniereAnalyse: new Date().toLocaleDateString('fr-FR'),
-      derniereScore: resultat.score_sante,
+    const nomFinal = nomEdite.trim() || resultat.type_plante || 'Ma plante';
+    const nouvelleEntreeHistorique = {
+      date: new Date().toLocaleDateString('fr-FR'),
+      score: resultat.score_sante,
+      etatSante: resultat.etat_sante,
+      besoinEau: resultat.besoin_eau,
+      observations: resultat.observations,
+      conseilPrincipal: resultat.conseil_principal,
+      conseilsSecondaires: resultat.conseils_secondaires || [],
     };
-    persist([...plantes, nouvellePlante]);
-    Alert.alert('✅ Ajoutée !', `${resultat.type_plante} a été ajoutée à tes plantes suivies.`);
+
+    if (planteCibleId) {
+      // On complète l'historique d'une plante déjà suivie.
+      const listeMaj = plantes.map(p => {
+        if (p.id !== planteCibleId) return p;
+        return {
+          ...p,
+          eau: resultat.besoin_eau,
+          prochain: resultat.besoin_eau === 'Urgent' ? 'Maintenant !' : resultat.besoin_eau === 'Élevé' ? 'Ce soir' : 'Dans 2-3 jours',
+          c: COULEUR_EAU[resultat.besoin_eau] || p.c,
+          historique: [...(p.historique || []), nouvelleEntreeHistorique],
+        };
+      });
+      persist(listeMaj);
+      Alert.alert('✅ Historique mis à jour !', `Une nouvelle analyse a été ajoutée pour ${plantes.find(p => p.id === planteCibleId)?.n}.`);
+    } else {
+      // Nouvelle plante suivie.
+      const nouvellePlante = {
+        id: Date.now(),
+        n: nomFinal,
+        icon: '🌿',
+        eau: resultat.besoin_eau,
+        prochain: resultat.besoin_eau === 'Urgent' ? 'Maintenant !' : resultat.besoin_eau === 'Élevé' ? 'Ce soir' : 'Dans 2-3 jours',
+        c: COULEUR_EAU[resultat.besoin_eau] || PALETTE.green,
+        historique: [nouvelleEntreeHistorique],
+      };
+      persist([...plantes, nouvellePlante]);
+      Alert.alert('✅ Ajoutée !', `${nomFinal} a été ajoutée à tes plantes suivies.`);
+    }
+
     reinitialiserAnalyse();
   };
 
@@ -138,15 +177,100 @@ export default function PotagerScreen({ navigation }) {
     setPhotoUri(null);
     setResultat(null);
     setErreurAnalyse(null);
+    setPlanteCibleId(null);
+    setNomEdite('');
   };
 
-  const ouvrirChoixPhoto = () => {
+  const ajouterManuellement = () => {
+    if (!nomManuel.trim()) return;
+    const nouvellePlante = {
+      id: Date.now(),
+      n: nomManuel.trim(),
+      icon: '🌱',
+      eau: 'Modéré',
+      prochain: 'À définir',
+      c: PALETTE.green,
+      historique: [],
+    };
+    persist([...plantes, nouvellePlante]);
+    setNomManuel('');
+    setShowAjoutManuel(false);
+  };
+
+  const supprimerPlante = id => {
+    const plante = plantes.find(p => p.id === id);
+    Alert.alert(
+      'Supprimer cette plante ?',
+      `"${plante?.n}" et tout son historique seront définitivement supprimés.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Supprimer', style: 'destructive', onPress: () => { persist(plantes.filter(p => p.id !== id)); setPlanteOuverte(null); } },
+      ]
+    );
+  };
+
+  const ouvrirChoixPhoto = (cibleId = null) => {
     Alert.alert('Analyser une plante', 'Comment veux-tu fournir la photo ?', [
-      { text: '📷 Prendre une photo', onPress: prendrePhoto },
-      { text: '🖼️ Choisir dans la galerie', onPress: choisirDansGalerie },
+      { text: '📷 Prendre une photo', onPress: () => prendrePhoto(cibleId) },
+      { text: '🖼️ Choisir dans la galerie', onPress: () => choisirDansGalerie(cibleId) },
       { text: 'Annuler', style: 'cancel' },
     ]);
   };
+
+  // ── Vue historique complet d'une plante ──
+  if (planteOuverte) {
+    const p = plantes.find(x => x.id === planteOuverte);
+    if (!p) { setPlanteOuverte(null); return null; }
+    return (
+      <View style={[styles.root, { backgroundColor: theme.bg }]}>
+        <View style={[styles.header, { borderColor: theme.border }]}>
+          <BackButton onPress={() => setPlanteOuverte(null)} />
+          <Text style={styles.headerTitle} numberOfLines={1}>{p.icon} {p.n}</Text>
+          <TouchableOpacity onPress={() => supprimerPlante(p.id)} style={styles.deleteBtn}>
+            <Text style={{ fontSize: 13 }}>🗑</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>
+          <View style={[styles.resumeBox, { borderColor: p.c + '33' }]}>
+            <Text style={styles.resumeLabel}>Besoin en eau actuel</Text>
+            <Chip label={p.eau} color={p.c} />
+            <Text style={[styles.resumeProchain, { color: p.c }]}>Prochain arrosage : {p.prochain}</Text>
+          </View>
+
+          <TouchableOpacity style={[styles.analyserBtn, { borderColor: PALETTE.green + '40' }]} onPress={() => ouvrirChoixPhoto(p.id)}>
+            <Text style={{ color: PALETTE.green, fontSize: 12, fontWeight: '600' }}>📸 Nouvelle analyse pour cette plante</Text>
+          </TouchableOpacity>
+
+          <SectionLabel style={{ marginTop: 18 }}>Historique ({(p.historique || []).length})</SectionLabel>
+          {(!p.historique || p.historique.length === 0) ? (
+            <Text style={styles.emptyHistText}>Aucune analyse enregistrée pour l'instant.</Text>
+          ) : (
+            [...p.historique].reverse().map((entree, i) => (
+              <View key={i} style={[styles.histCard, { borderColor: (COULEUR_ETAT[entree.etatSante] || PALETTE.green) + '30' }]}>
+                <View style={styles.histHeader}>
+                  <Text style={styles.histDate}>{entree.date}</Text>
+                  {entree.etatSante && (
+                    <View style={[styles.etatBadge, { backgroundColor: (COULEUR_ETAT[entree.etatSante] || PALETTE.green) + '22' }]}>
+                      <Text style={{ color: COULEUR_ETAT[entree.etatSante] || PALETTE.green, fontSize: 10, fontWeight: '700' }}>
+                        {entree.etatSante}{entree.score ? ` · ${entree.score}%` : ''}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                {entree.observations && <Text style={styles.histObs}>{entree.observations}</Text>}
+                {entree.conseilPrincipal && (
+                  <View style={styles.histConseilBox}>
+                    <Text style={styles.histConseilLabel}>🌟 Conseil</Text>
+                    <Text style={styles.histConseilText}>{entree.conseilPrincipal}</Text>
+                  </View>
+                )}
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
@@ -160,13 +284,12 @@ export default function PotagerScreen({ navigation }) {
           <Text style={[styles.coachLabel, { color: PALETTE.green }]}>🌟 Kira — Météo & Potager</Text>
           <Text style={styles.coachText}>
             Il fait {meteo.temp}°C aujourd'hui, humidité {meteo.humidite}%. Conseil : arrose tes
-            tomates ce soir après 19h pour éviter l'évaporation. 🍅
+            plantes gourmandes en eau ce soir après 19h pour éviter l'évaporation.
           </Text>
         </View>
 
-        {/* ── Zone d'analyse photo ── */}
         {!photoUri ? (
-          <TouchableOpacity style={[styles.photoBox, { borderColor: PALETTE.green + '40' }]} onPress={ouvrirChoixPhoto} activeOpacity={0.85}>
+          <TouchableOpacity style={[styles.photoBox, { borderColor: PALETTE.green + '40' }]} onPress={() => ouvrirChoixPhoto(null)} activeOpacity={0.85}>
             <Text style={styles.photoIcon}>📸</Text>
             <Text style={styles.photoTitle}>Analyse de plante par Kira</Text>
             <Text style={styles.photoDesc}>
@@ -174,7 +297,7 @@ export default function PotagerScreen({ navigation }) {
               donnera des conseils d'arrosage, d'engrais ou de taille.
             </Text>
             <View style={[styles.photoBtn, { backgroundColor: PALETTE.green + '20', borderColor: PALETTE.green + '40' }]}>
-              <Text style={{ color: PALETTE.green, fontSize: 12, fontWeight: '600' }}>📷 Analyser ma plante</Text>
+              <Text style={{ color: PALETTE.green, fontSize: 12, fontWeight: '600' }}>📷 Analyser une plante</Text>
             </View>
           </TouchableOpacity>
         ) : (
@@ -183,7 +306,6 @@ export default function PotagerScreen({ navigation }) {
 
             {analysing && (
               <View style={styles.analysingBox}>
-                <ActivityIndicator color={theme.accent} size="large" />
                 <Text style={styles.analysingText}>
                   Kira analyse ta plante via {AI_PROVIDERS.find(p => p.id === providerActif)?.nom || '...'}
                 </Text>
@@ -204,8 +326,16 @@ export default function PotagerScreen({ navigation }) {
 
             {resultat && (
               <View style={styles.resultatBox}>
+                <Text style={styles.champLabel}>Nom de la plante (modifiable)</Text>
+                <TextInput
+                  style={styles.nomInput}
+                  value={nomEdite}
+                  onChangeText={setNomEdite}
+                  placeholder="Nom de la plante..."
+                  placeholderTextColor="#555566"
+                />
+
                 <View style={styles.resultatHeader}>
-                  <Text style={styles.resultatType}>{resultat.type_plante}</Text>
                   <View style={[styles.etatBadge, { backgroundColor: (COULEUR_ETAT[resultat.etat_sante] || PALETTE.green) + '22' }]}>
                     <Text style={{ color: COULEUR_ETAT[resultat.etat_sante] || PALETTE.green, fontSize: 11, fontWeight: '700' }}>
                       {resultat.etat_sante} · {resultat.score_sante}%
@@ -235,7 +365,7 @@ export default function PotagerScreen({ navigation }) {
                 )}
 
                 <TouchableOpacity style={[styles.saveBtn, { backgroundColor: PALETTE.green }]} onPress={enregistrerDansSuivi}>
-                  <Text style={styles.saveBtnText}>+ Ajouter à mes plantes suivies</Text>
+                  <Text style={styles.saveBtnText}>{planteCibleId ? "+ Ajouter à l'historique" : '+ Ajouter à mes plantes suivies'}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -246,20 +376,42 @@ export default function PotagerScreen({ navigation }) {
           </View>
         )}
 
-        {/* ── Liste des plantes suivies ── */}
-        <SectionLabel style={{ marginTop: 18 }}>Mes plantes suivies</SectionLabel>
+        <View style={styles.suiviesHeaderRow}>
+          <SectionLabel style={{ marginTop: 18, marginBottom: 0 }}>Mes plantes suivies</SectionLabel>
+          <TouchableOpacity onPress={() => setShowAjoutManuel(!showAjoutManuel)}>
+            <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '600' }}>{showAjoutManuel ? 'Annuler' : '+ Ajouter manuellement'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {showAjoutManuel && (
+          <View style={[styles.ajoutManuelBox, { borderColor: theme.accent + '30' }]}>
+            <TextInput
+              style={styles.nomInput}
+              value={nomManuel}
+              onChangeText={setNomManuel}
+              placeholder="Nom de la plante (ex: Basilic)"
+              placeholderTextColor="#555566"
+              autoFocus
+            />
+            <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.accent, marginTop: 8 }]} onPress={ajouterManuellement}>
+              <Text style={styles.saveBtnText}>Ajouter</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {plantes.map(p => (
-          <View key={p.id} style={[styles.planteCard, { borderColor: p.c + '22' }]}>
+          <TouchableOpacity key={p.id} style={[styles.planteCard, { borderColor: p.c + '22' }]} onPress={() => setPlanteOuverte(p.id)} activeOpacity={0.85}>
             <Text style={{ fontSize: 28 }}>{p.icon}</Text>
             <View style={{ flex: 1 }}>
               <Text style={styles.planteName}>{p.n}</Text>
               <Text style={styles.planteMeta}>Besoin en eau : {p.eau}</Text>
               <Text style={[styles.planteProchain, { color: p.c }]}>Prochain arrosage : {p.prochain}</Text>
-              {p.derniereAnalyse && (
-                <Chip label={`Analysé le ${p.derniereAnalyse}${p.derniereScore ? ` · ${p.derniereScore}%` : ''}`} color={PALETTE.violet} />
-              )}
+              <Text style={styles.planteHistCount}>
+                {(p.historique || []).length > 0 ? `🕘 ${p.historique.length} analyse${p.historique.length > 1 ? 's' : ''} — voir l'historique` : 'Aucune analyse — appuie pour en ajouter une'}
+              </Text>
             </View>
-          </View>
+            <Text style={{ color: '#555566', fontSize: 16 }}>→</Text>
+          </TouchableOpacity>
         ))}
       </ScrollView>
     </View>
@@ -269,7 +421,8 @@ export default function PotagerScreen({ navigation }) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 50, paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: 1 },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: '#fff', flex: 1 },
+  deleteBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 99, backgroundColor: 'rgba(255,101,132,0.12)' },
   coachBox: { borderRadius: 14, padding: 14, borderWidth: 1, marginBottom: 14 },
   coachLabel: { fontSize: 11, fontWeight: '600', marginBottom: 5 },
   coachText: { fontSize: 12, color: '#ccc', lineHeight: 18 },
@@ -288,8 +441,12 @@ const styles = StyleSheet.create({
   smallBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 99, alignSelf: 'flex-start' },
   smallBtnText: { fontSize: 11, color: '#fff', fontWeight: '700' },
   resultatBox: { padding: 16 },
-  resultatHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 10 },
-  resultatType: { fontSize: 16, fontWeight: '700', color: '#fff', flex: 1 },
+  champLabel: { fontSize: 10, color: '#888899', marginBottom: 5 },
+  nomInput: {
+    backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 9, color: '#fff', fontSize: 14, padding: 10, marginBottom: 12, fontWeight: '600',
+  },
+  resultatHeader: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'flex-start', marginBottom: 12, gap: 10 },
   etatBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 99 },
   eauRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   eauLabel: { fontSize: 12, color: '#888899' },
@@ -304,8 +461,23 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#000', fontWeight: '700', fontSize: 13 },
   recommencerBtn: { padding: 12, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.03)' },
   recommencerText: { color: '#888899', fontSize: 12 },
+  suiviesHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
+  ajoutManuelBox: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 14, borderWidth: 1, marginTop: 10 },
   planteCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: 13, marginBottom: 9, borderWidth: 1 },
   planteName: { fontSize: 13, fontWeight: '600', color: '#fff' },
   planteMeta: { fontSize: 11, color: '#666677', marginTop: 2 },
   planteProchain: { fontSize: 11, marginTop: 1, fontWeight: '600' },
+  planteHistCount: { fontSize: 10, color: '#555566', marginTop: 4 },
+  resumeBox: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: 14, borderWidth: 1, marginBottom: 12 },
+  resumeLabel: { fontSize: 10, color: '#888899', marginBottom: 6 },
+  resumeProchain: { fontSize: 12, fontWeight: '600', marginTop: 8 },
+  analyserBtn: { padding: 12, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginBottom: 8 },
+  emptyHistText: { fontSize: 12, color: '#555566', textAlign: 'center', marginTop: 20 },
+  histCard: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: 13, marginBottom: 9, borderWidth: 1 },
+  histHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  histDate: { fontSize: 12, color: '#aab', fontWeight: '600' },
+  histObs: { fontSize: 12, color: '#ccc', lineHeight: 18, marginBottom: 8 },
+  histConseilBox: { backgroundColor: 'rgba(108,99,255,0.08)', borderRadius: 10, padding: 10 },
+  histConseilLabel: { fontSize: 10, color: PALETTE.violet, fontWeight: '600', marginBottom: 4 },
+  histConseilText: { fontSize: 12, color: '#ccc', lineHeight: 17 },
 });

@@ -2,12 +2,6 @@
 //  GOOGLEAUTH.JS — Authentification OAuth Google
 //  Gère la connexion/déconnexion du compte Google
 //  et le rafraîchissement automatique du jeton
-//  d'accès (les jetons Google expirent après 1h).
-//
-//  Utilise expo-auth-session, la méthode officielle
-//  recommandée par Expo pour OAuth (ouvre un
-//  navigateur système sécurisé, pas une WebView
-//  custom — plus sûr et accepté par Google).
 // ═══════════════════════════════════════════
 
 import * as AuthSession from 'expo-auth-session';
@@ -25,8 +19,7 @@ const DECOUVERTE_GOOGLE = {
 };
 
 /**
- * Récupère le Client ID configuré par l'utilisateur dans les Paramètres
- * (créé sur Google Cloud Console, voir le guide d'installation).
+ * Récupère le Client ID configuré par l'utilisateur
  */
 export async function getGoogleClientId() {
   const config = await getData('google_config');
@@ -39,12 +32,13 @@ export async function setGoogleClientId(clientId) {
 }
 
 /**
- * Construit la configuration de requête OAuth nécessaire au hook useAuthRequest.
- * À utiliser dans un composant React avec :
- *   const [request, response, promptAsync] = AuthSession.useAuthRequest(config, DECOUVERTE_GOOGLE);
+ * Construit la configuration de requête OAuth.
+ * Utilise makeRedirectUri() sans argument pour utiliser le proxy https://auth.expo.io
  */
 export function construireConfigOAuth(clientId) {
-  const redirectUri = AuthSession.makeRedirectUri({ scheme: 'kiraosclean' });
+  // CORRECTION : makeRedirectUri() sans paramètres utilise le proxy HTTPS d'Expo
+  const redirectUri = AuthSession.makeRedirectUri();
+  
   return {
     clientId,
     scopes: SCOPES,
@@ -58,8 +52,7 @@ export function construireConfigOAuth(clientId) {
 export { DECOUVERTE_GOOGLE };
 
 /**
- * Échange le code d'autorisation reçu après connexion contre un vrai jeton d'accès
- * (et un refresh token pour pouvoir se reconnecter automatiquement plus tard).
+ * Échange le code d'autorisation reçu après connexion contre un jeton d'accès
  */
 export async function echangerCodeContreJeton(code, clientId, redirectUri, codeVerifier) {
   const res = await fetch(DECOUVERTE_GOOGLE.tokenEndpoint, {
@@ -90,9 +83,7 @@ export async function echangerCodeContreJeton(code, clientId, redirectUri, codeV
 }
 
 /**
- * Rafraîchit le jeton d'accès expiré à l'aide du refresh token.
- * Google ne renvoie généralement pas de nouveau refresh token à cette étape —
- * on conserve donc l'ancien.
+ * Rafraîchit le jeton d'accès expiré
  */
 export async function rafraichirJeton(clientId) {
   const jetonsActuels = await getData('google_jetons');
@@ -126,15 +117,12 @@ export async function rafraichirJeton(clientId) {
 }
 
 /**
- * Retourne un jeton d'accès valide, en le rafraîchissant automatiquement
- * s'il a expiré. C'est la fonction à utiliser avant chaque appel à l'API
- * Google Calendar.
+ * Retourne un jeton d'accès valide
  */
 export async function getJetonValide() {
   const jetons = await getData('google_jetons');
   if (!jetons) return null;
 
-  // Marge de sécurité de 60 secondes avant l'expiration réelle
   if (Date.now() < jetons.expiresAt - 60000) {
     return jetons.accessToken;
   }
@@ -144,7 +132,6 @@ export async function getJetonValide() {
     const nouveauxJetons = await rafraichirJeton(clientId);
     return nouveauxJetons.accessToken;
   } catch (e) {
-    // Le refresh a échoué (révoqué, expiré...) — il faudra se reconnecter
     return null;
   }
 }
@@ -160,7 +147,7 @@ export async function deconnecterGoogle() {
     try {
       await fetch(`${DECOUVERTE_GOOGLE.revocationEndpoint}?token=${jetons.accessToken}`, { method: 'POST' });
     } catch {
-      // Si la révocation réseau échoue, on supprime quand même localement
+      // Échec silencieux
     }
   }
   await removeData('google_jetons');

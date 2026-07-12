@@ -1,27 +1,17 @@
 // ═══════════════════════════════════════════
-//  CUISINECALLER.JS — Recettes quotidiennes par IA (lot 39)
-//  NOUVEAU : comble un vrai manque identifié lors
-//  du test du 28/06 — les recettes étaient codées en
-//  dur et ne changeaient jamais ("🚧 De nouvelles
-//  recettes seront ajoutées chaque jour
-//  automatiquement par Kira" — commentaire resté en
-//  l'état depuis le début du projet, jamais construit).
-//
-//  FONCTIONNEMENT :
-//  - Chaque jour, Kira génère 3 nouvelles recettes via
-//    ton fournisseur IA configuré (Gemini, Claude, etc.)
-//  - Le résultat est mis en cache local avec la date du
-//    jour — Kira ne re-génère pas si tu ouvres le
-//    module plusieurs fois dans la même journée, pour
-//    économiser les appels API.
-//  - Si aucun fournisseur IA n'est configuré (mode
-//    hors-ligne), on retourne les recettes de secours
-//    codées en dur — la roue tourne entre 6 recettes
-//    de secours selon le jour de la semaine, pour
-//    varier un minimum même sans IA.
-//  - Le profil utilisateur (allergies, préférences
-//    éventuellement dans les notes de Kira) est pris
-//    en compte dans le prompt si disponible.
+//  CUISINECALLER.JS — Recettes quotidiennes par IA
+//  MISE À JOUR LOT 47 : corrige deux bugs remontés
+//  lors du test du 11/07 —
+//  1) le bouton "Nouvelles recettes" ne changeait
+//     rien car il relisait le cache du jour au lieu
+//     de forcer une régénération.
+//  2) en mode hors-ligne (pas de clé IA), la rotation
+//     se faisait par JOUR DE LA SEMAINE (7 valeurs)
+//     donc "toujours la même recette" d'une semaine
+//     à l'autre. Rotation refaite sur la date complète,
+//     sur un plus grand choix de recettes.
+//  Ajout demandé : structure entrée/plat/dessert au
+//  lieu de 3 recettes non catégorisées.
 // ═══════════════════════════════════════════
 
 import { getData, setData } from './storage';
@@ -29,93 +19,67 @@ import { demanderAKira } from './aiCaller';
 
 const CLE_CACHE_RECETTES = 'cuisine_recettes_cache';
 
-// Recettes de secours (mode hors-ligne ou absence de clé IA), une par
-// jour de la semaine (0=dimanche...6=samedi) pour varier un minimum.
-const RECETTES_SECOURS = [
-  {
-    titre: 'Poulet rôti aux herbes',
-    temps: '45 min',
-    difficulte: 'Facile',
-    ingredients: ['1 poulet entier', 'Herbes de Provence', 'Huile d\'olive', 'Ail', 'Citron'],
-    etapes: [
-      'Préchauffer le four à 200°C.',
-      'Badigeonner le poulet d\'huile et d\'herbes.',
-      'Glisser de l\'ail et du citron à l\'intérieur.',
-      'Cuire 45 min en arrosant régulièrement.',
-    ],
-    conseil: 'Kira suggère d\'accompagner avec des pommes de terre rôties au même four !',
-  },
-  {
-    titre: 'Salade de lentilles aux légumes',
-    temps: '25 min',
-    difficulte: 'Très facile',
-    ingredients: ['200g de lentilles', 'Tomates cerises', 'Concombre', 'Oignons rouges', 'Vinaigrette'],
-    etapes: [
-      'Cuire les lentilles 20 min dans l\'eau salée.',
-      'Couper les légumes en petits dés.',
-      'Mélanger avec les lentilles refroidies.',
-      'Assaisonner avec la vinaigrette.',
-    ],
-    conseil: 'Riche en protéines végétales — parfait pour un repas équilibré !',
-  },
-  {
-    titre: 'Pâtes carbonara légères',
-    temps: '20 min',
-    difficulte: 'Facile',
-    ingredients: ['350g de spaghetti', '150g de lardons', '3 œufs', 'Parmesan', 'Poivre noir'],
-    etapes: [
-      'Cuire les pâtes al dente.',
-      'Faire revenir les lardons à sec.',
-      'Battre les œufs avec le parmesan.',
-      'Hors du feu, mélanger pâtes, lardons et sauce aux œufs.',
-    ],
-    conseil: 'Le secret : retirer la casserole du feu avant d\'ajouter les œufs pour éviter de les brouiller.',
-  },
-  {
-    titre: 'Omelette aux champignons',
-    temps: '15 min',
-    difficulte: 'Très facile',
-    ingredients: ['4 œufs', '200g de champignons', 'Crème fraîche', 'Persil', 'Beurre'],
-    etapes: [
-      'Faire sauter les champignons au beurre.',
-      'Battre les œufs avec la crème et le persil.',
-      'Verser dans la poêle et cuire à feu moyen.',
-      'Plier l\'omelette et servir aussitôt.',
-    ],
-    conseil: 'Une omelette baveuse est meilleure — inutile de la cuire trop longtemps !',
-  },
-  {
-    titre: 'Soupe de légumes maison',
-    temps: '35 min',
-    difficulte: 'Facile',
-    ingredients: ['Carottes', 'Poireaux', 'Pommes de terre', 'Bouillon de légumes', 'Crème'],
-    etapes: [
-      'Éplucher et couper tous les légumes.',
-      'Faire revenir dans un peu de beurre.',
-      'Couvrir de bouillon et cuire 25 min.',
-      'Mixer et ajouter une touche de crème.',
-    ],
-    conseil: 'Ajoute un filet d\'huile de truffe au moment de servir pour un effet wow !',
-  },
-  {
-    titre: 'Poêlée de riz aux crevettes',
-    temps: '20 min',
-    difficulte: 'Facile',
-    ingredients: ['200g de riz cuit', '250g de crevettes', 'Poivrons', 'Sauce soja', 'Gingembre'],
-    etapes: [
-      'Faire revenir les poivrons en dés.',
-      'Ajouter les crevettes et le gingembre.',
-      'Incorporer le riz cuit et la sauce soja.',
-      'Faire sauter à feu vif 3 minutes.',
-    ],
-    conseil: 'Utilise du riz cuit de la veille pour un meilleur résultat — il accroche moins.',
-  },
+// ── Recettes de secours (mode hors-ligne ou absence de clé IA) ──
+// Organisées par catégorie, avec un choix plus large qu'avant pour
+// qu'une vraie rotation quotidienne soit possible sans se répéter
+// toutes les semaines.
+const ENTREES_SECOURS = [
+  { titre: 'Velouté de potiron', temps: '20 min', difficulte: 'Très facile', ingredients: ['500g potiron', 'Bouillon de légumes', 'Crème fraîche', 'Muscade'], etapes: ['Éplucher et cuire le potiron 15 min.', 'Mixer avec le bouillon.', 'Ajouter la crème et la muscade.'], conseil: 'Un filet d\'huile de noisette apporte du croquant en plus.' },
+  { titre: 'Salade de chèvre chaud', temps: '15 min', difficulte: 'Facile', ingredients: ['Salade verte', '2 crottins de chèvre', 'Miel', 'Noix', 'Pain de campagne'], etapes: ['Toaster le pain avec le chèvre au four.', 'Arroser de miel.', 'Servir sur la salade avec les noix.'], conseil: 'Le miel de châtaignier apporte une belle amertume qui contraste bien.' },
+  { titre: 'Carpaccio de tomates', temps: '10 min', difficulte: 'Très facile', ingredients: ['4 tomates variées', 'Basilic frais', 'Huile d\'olive', 'Parmesan'], etapes: ['Trancher finement les tomates.', 'Disposer en cercle.', 'Parsemer de basilic et copeaux de parmesan.'], conseil: 'Utilise des tomates de couleurs différentes pour un joli visuel.' },
+  { titre: 'Soupe miso', temps: '15 min', difficulte: 'Facile', ingredients: ['Pâte miso', 'Tofu soyeux', 'Algues wakamé', 'Ciboulette'], etapes: ['Chauffer l\'eau sans bouillir.', 'Délayer la pâte miso.', 'Ajouter tofu et algues.'], conseil: 'Ne jamais faire bouillir le miso, ça détruit ses probiotiques.' },
+  { titre: 'Bruschetta tomates-basilic', temps: '10 min', difficulte: 'Très facile', ingredients: ['Pain de campagne', 'Tomates', 'Ail', 'Basilic', 'Huile d\'olive'], etapes: ['Toaster le pain frotté à l\'ail.', 'Couvrir de tomates en dés.', 'Arroser d\'huile et parsemer de basilic.'], conseil: 'Sale les tomates 10 min avant pour qu\'elles rendent leur eau sucrée.' },
+  { titre: 'Houmous maison', temps: '10 min', difficulte: 'Très facile', ingredients: ['Pois chiches', 'Tahini', 'Citron', 'Ail', 'Cumin'], etapes: ['Mixer tous les ingrédients.', 'Ajuster l\'assaisonnement.', 'Servir avec des crudités.'], conseil: 'Un glaçon mixé avec donne une texture plus mousseuse.' },
+];
+
+const PLATS_SECOURS = [
+  { titre: 'Poulet rôti aux herbes', temps: '45 min', difficulte: 'Facile', ingredients: ['1 poulet entier', 'Herbes de Provence', 'Huile d\'olive', 'Ail', 'Citron'], etapes: ['Préchauffer le four à 200°C.', 'Badigeonner le poulet d\'huile et d\'herbes.', 'Glisser de l\'ail et du citron à l\'intérieur.', 'Cuire 45 min en arrosant régulièrement.'], conseil: 'Kira suggère d\'accompagner avec des pommes de terre rôties au même four !' },
+  { titre: 'Salade de lentilles aux légumes', temps: '25 min', difficulte: 'Très facile', ingredients: ['200g de lentilles', 'Tomates cerises', 'Concombre', 'Oignons rouges', 'Vinaigrette'], etapes: ['Cuire les lentilles 20 min dans l\'eau salée.', 'Couper les légumes en petits dés.', 'Mélanger avec les lentilles refroidies.', 'Assaisonner avec la vinaigrette.'], conseil: 'Riche en protéines végétales — parfait pour un repas équilibré !' },
+  { titre: 'Pâtes carbonara légères', temps: '20 min', difficulte: 'Facile', ingredients: ['350g de spaghetti', '150g de lardons', '3 œufs', 'Parmesan', 'Poivre noir'], etapes: ['Cuire les pâtes al dente.', 'Faire revenir les lardons à sec.', 'Battre les œufs avec le parmesan.', 'Hors du feu, mélanger pâtes, lardons et sauce aux œufs.'], conseil: 'Le secret : retirer la casserole du feu avant d\'ajouter les œufs pour éviter de les brouiller.' },
+  { titre: 'Omelette aux champignons', temps: '15 min', difficulte: 'Très facile', ingredients: ['4 œufs', '200g de champignons', 'Crème fraîche', 'Persil', 'Beurre'], etapes: ['Faire sauter les champignons au beurre.', 'Battre les œufs avec la crème et le persil.', 'Verser dans la poêle et cuire à feu moyen.', 'Plier l\'omelette et servir aussitôt.'], conseil: 'Une omelette baveuse est meilleure — inutile de la cuire trop longtemps !' },
+  { titre: 'Poêlée de riz aux crevettes', temps: '20 min', difficulte: 'Facile', ingredients: ['200g de riz cuit', '250g de crevettes', 'Poivrons', 'Sauce soja', 'Gingembre'], etapes: ['Faire revenir les poivrons en dés.', 'Ajouter les crevettes et le gingembre.', 'Incorporer le riz cuit et la sauce soja.', 'Faire sauter à feu vif 3 minutes.'], conseil: 'Utilise du riz cuit de la veille pour un meilleur résultat — il accroche moins.' },
+  { titre: 'Curry de légumes au lait de coco', temps: '30 min', difficulte: 'Facile', ingredients: ['Lait de coco', 'Patate douce', 'Pois chiches', 'Pâte de curry', 'Épinards'], etapes: ['Faire revenir la pâte de curry.', 'Ajouter la patate douce et le lait de coco.', 'Mijoter 20 min.', 'Ajouter pois chiches et épinards en fin de cuisson.'], conseil: 'Encore meilleur réchauffé le lendemain — les épices ont le temps de infuser.' },
+  { titre: 'Saumon en papillote', temps: '25 min', difficulte: 'Facile', ingredients: ['2 pavés de saumon', 'Citron', 'Aneth', 'Courgettes', 'Huile d\'olive'], etapes: ['Disposer le saumon et les légumes sur du papier cuisson.', 'Arroser de citron et d\'huile.', 'Fermer la papillote et cuire 20 min à 180°C.'], conseil: 'La papillote garde tout le moelleux du poisson sans ajouter de matière grasse.' },
+  { titre: 'Chili sin carne', temps: '35 min', difficulte: 'Facile', ingredients: ['Haricots rouges', 'Maïs', 'Tomates concassées', 'Poivrons', 'Épices chili'], etapes: ['Faire revenir oignons et poivrons.', 'Ajouter tomates, haricots et maïs.', 'Assaisonner et mijoter 25 min.'], conseil: 'Un carré de chocolat noir fondu dedans arrondit magnifiquement les saveurs.' },
+];
+
+const DESSERTS_SECOURS = [
+  { titre: 'Compote pommes-cannelle', temps: '20 min', difficulte: 'Très facile', ingredients: ['6 pommes', 'Cannelle', 'Un peu de sucre', 'Jus de citron'], etapes: ['Éplucher et couper les pommes.', 'Cuire à feu doux avec un fond d\'eau.', 'Écraser à la fourchette, ajouter la cannelle.'], conseil: 'Laisse quelques morceaux entiers pour une texture plus intéressante.' },
+  { titre: 'Yaourt maison miel-noix', temps: '5 min (+ repos)', difficulte: 'Très facile', ingredients: ['Yaourts nature', 'Miel', 'Noix concassées'], etapes: ['Verser le yaourt dans un bol.', 'Arroser de miel.', 'Parsemer de noix.'], conseil: 'Fais-le la veille pour que le miel imprègne bien le yaourt.' },
+  { titre: 'Fondant au chocolat', temps: '25 min', difficulte: 'Facile', ingredients: ['200g chocolat noir', '150g beurre', '3 œufs', '100g sucre', '50g farine'], etapes: ['Faire fondre chocolat et beurre.', 'Mélanger avec œufs et sucre.', 'Incorporer la farine.', 'Cuire 12 min à 180°C — le cœur doit rester coulant.'], conseil: 'Sors-le du four dès que le dessus craquelle, pas plus — le cœur continue de cuire hors du four.' },
+  { titre: 'Salade de fruits de saison', temps: '10 min', difficulte: 'Très facile', ingredients: ['Fruits de saison au choix', 'Jus de citron', 'Menthe fraîche'], etapes: ['Couper les fruits en morceaux.', 'Arroser de citron pour éviter l\'oxydation.', 'Parsemer de menthe ciselée.'], conseil: 'Prépare-la juste avant de servir pour garder le croquant des fruits.' },
+  { titre: 'Riz au lait à la vanille', temps: '30 min', difficulte: 'Facile', ingredients: ['Riz rond', 'Lait', 'Vanille', 'Sucre'], etapes: ['Cuire le riz dans le lait vanillé à feu doux.', 'Remuer régulièrement 25 min.', 'Sucrer en fin de cuisson.'], conseil: 'Un caramel maison versé dessus transforme complètement le dessert.' },
+  { titre: 'Mousse au chocolat', temps: '15 min (+ repos)', difficulte: 'Facile', ingredients: ['200g chocolat noir', '4 œufs', 'Une pincée de sel'], etapes: ['Faire fondre le chocolat.', 'Séparer blancs et jaunes.', 'Mélanger jaunes au chocolat, incorporer les blancs montés en neige.', 'Réfrigérer 3h minimum.'], conseil: 'Une pincée de sel dans les blancs les fait monter plus fermes.' },
 ];
 
 /**
- * Construit le prompt envoyé à l'IA pour générer 3 recettes du jour.
- * Intègre la date du jour et le profil utilisateur si disponible,
- * pour des suggestions personnalisées et adaptées à la saison.
+ * Choisit un élément d'un tableau de façon déterministe à partir d'une
+ * chaîne (ex: une date) — même date + même tableau = même résultat, mais
+ * ça change chaque jour puisque la date change. Contrairement à l'ancien
+ * `new Date().getDay() % 6` (7 valeurs seulement, se répète chaque semaine),
+ * on part ici de la date COMPLÈTE, donc la séquence ne boucle qu'après
+ * avoir épuisé toutes les combinaisons possibles.
+ */
+function choisirParSeed(tableau, seedTexte, decalage = 0) {
+  let hash = 0;
+  for (let i = 0; i < seedTexte.length; i++) {
+    hash = (hash * 31 + seedTexte.charCodeAt(i)) >>> 0;
+  }
+  return tableau[(hash + decalage) % tableau.length];
+}
+
+function getRecettesSecoursDuJour() {
+  const seed = new Date().toISOString().slice(0, 10); // ex: "2026-07-11"
+  return [
+    { ...choisirParSeed(ENTREES_SECOURS, seed, 0), type: 'Entrée' },
+    { ...choisirParSeed(PLATS_SECOURS, seed, 1), type: 'Plat' },
+    { ...choisirParSeed(DESSERTS_SECOURS, seed, 2), type: 'Dessert' },
+  ];
+}
+
+/**
+ * Construit le prompt envoyé à l'IA pour générer le menu du jour,
+ * structuré en entrée/plat/dessert (demande explicite du 11/07).
  */
 function construirePromptRecettes(profil) {
   const maintenant = new Date();
@@ -123,24 +87,27 @@ function construirePromptRecettes(profil) {
   const mois = maintenant.toLocaleDateString('fr-FR', { month: 'long' });
   const prenom = profil?.prenom || 'l\'utilisateur';
 
-  return `Tu es Kira, assistante culinaire de ${prenom}. Génère 3 recettes de cuisine pour ce ${jourSemaine} de ${mois}.
+  return `Tu es Kira, assistante culinaire de ${prenom}. Compose un menu complet pour ce ${jourSemaine} de ${mois} : une entrée, un plat, et un dessert.
 
-Réponds UNIQUEMENT avec un tableau JSON valide, rien d'autre. Voici un exemple du format EXACT attendu :
+Réponds UNIQUEMENT avec un tableau JSON valide de 3 éléments, rien d'autre. Voici le format EXACT attendu :
 
 [
   {
+    "type": "Entrée",
     "titre": "Nom de la recette",
-    "temps": "30 min",
+    "temps": "15 min",
     "difficulte": "Facile",
-    "ingredients": ["ingrédient 1", "ingrédient 2", "ingrédient 3"],
-    "etapes": ["Étape 1 détaillée.", "Étape 2 détaillée.", "Étape 3 détaillée."],
+    "ingredients": ["ingrédient 1", "ingrédient 2"],
+    "etapes": ["Étape 1 détaillée.", "Étape 2 détaillée."],
     "conseil": "Un conseil personnalisé de Kira sur cette recette."
-  }
+  },
+  { "type": "Plat", ... même structure ... },
+  { "type": "Dessert", ... même structure ... }
 ]
 
 Règles :
-- 3 recettes variées adaptées à la saison (${mois})
-- Une recette simple rapide (moins de 20 min), une équilibrée, une plus élaborée
+- Exactement 3 éléments, dans cet ordre : Entrée, Plat, Dessert
+- Adapté à la saison (${mois}), varié par rapport à un menu classique
 - Les ingrédients doivent être faciles à trouver en France
 - Les étapes doivent être claires et détaillées
 - Le conseil de Kira doit être pratique et personnel
@@ -148,35 +115,32 @@ Règles :
 - Aucune virgule après le dernier élément d'un tableau ou d'un objet`;
 }
 
-/**
- * Nettoie et parse la réponse JSON de l'IA, en gérant les erreurs courantes
- * (balises markdown, virgules finales, etc.) — même logique que plantAnalyzer.
- */
 function extraireRecettesJson(texte) {
   let nettoye = texte.replace(/```json|```/g, '').trim();
   const matchCrochets = nettoye.match(/\[[\s\S]*\]/);
   let aTraiter = matchCrochets ? matchCrochets[0] : nettoye;
-  // Nettoie les virgules finales avant ] ou }
   aTraiter = aTraiter.replace(/,(\s*[}\]])/g, '$1');
   return JSON.parse(aTraiter);
 }
 
 /**
- * Retourne les recettes du jour. Logique :
- * 1. Si un cache existe pour AUJOURD'HUI → retourne le cache (pas d'appel IA)
- * 2. Si une IA est configurée → génère 3 nouvelles recettes et les met en cache
- * 3. Sinon → rotation entre les 6 recettes de secours selon le jour de la semaine
+ * Retourne le menu du jour (entrée/plat/dessert). Logique :
+ * 1. Si forcerRegeneration est vrai → on ignore le cache, on régénère.
+ * 2. Sinon, si un cache existe pour AUJOURD'HUI → retourne le cache.
+ * 3. Si une IA est configurée → génère un nouveau menu et le met en cache.
+ * 4. Sinon → menu de secours choisi selon la date complète (voir
+ *    choisirParSeed), varie chaque jour au lieu de boucler chaque semaine.
  */
-export async function getRecettesDuJour(appState, providerActif, apiKeys) {
+export async function getRecettesDuJour(appState, providerActif, apiKeys, forcerRegeneration = false) {
   const dateAujourdhui = new Date().toLocaleDateString('fr-FR');
 
-  // Vérifie le cache
-  const cache = await getData(CLE_CACHE_RECETTES);
-  if (cache && cache.date === dateAujourdhui && cache.recettes?.length > 0) {
-    return { recettes: cache.recettes, source: cache.source || 'cache' };
+  if (!forcerRegeneration) {
+    const cache = await getData(CLE_CACHE_RECETTES);
+    if (cache && cache.date === dateAujourdhui && cache.recettes?.length > 0) {
+      return { recettes: cache.recettes, source: cache.source || 'cache' };
+    }
   }
 
-  // Tente la génération par IA
   const { AI_PROVIDERS } = await import('./apiKeys');
   const providerInfo = AI_PROVIDERS.find(p => p.id === providerActif);
   const apiKey = providerActif ? apiKeys[providerActif] : null;
@@ -190,7 +154,7 @@ export async function getRecettesDuJour(appState, providerActif, apiKeys) {
         providerActif,
         apiKey,
         providerInfo.modeleParDefaut,
-        [] // pas d'historique nécessaire pour la génération de recettes
+        []
       );
 
       if (source === 'live') {
@@ -205,8 +169,10 @@ export async function getRecettesDuJour(appState, providerActif, apiKeys) {
     }
   }
 
-  // Recettes de secours : rotation par jour de la semaine (0=dim...6=sam)
-  const jourIndex = new Date().getDay();
-  const recetteSecours = [RECETTES_SECOURS[jourIndex % RECETTES_SECOURS.length]];
-  return { recettes: recetteSecours, source: 'offline' };
+  const recettesSecours = getRecettesSecoursDuJour();
+  // On met aussi en cache le menu de secours, pour que le module Cuisine
+  // affiche la même chose toute la journée (cohérent), et seulement un
+  // nouveau menu le lendemain OU si l'utilisateur force une régénération.
+  await setData(CLE_CACHE_RECETTES, { date: dateAujourdhui, recettes: recettesSecours, source: 'offline' });
+  return { recettes: recettesSecours, source: 'offline' };
 }

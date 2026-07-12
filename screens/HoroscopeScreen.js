@@ -5,9 +5,12 @@
 //  de l'utilisateur (utilisé dans kiraBrain.js)
 // ═══════════════════════════════════════════
 
-import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { BackButton, Chip, SectionLabel } from '../components/Shared';
+import { getAllApiKeys, getActiveAiProvider } from '../utils/apiKeys';
+import { getHoroscopeDuJour } from '../utils/horoscopeCaller';
 import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
 
@@ -32,6 +35,10 @@ export default function HoroscopeScreen({ navigation }) {
   const theme = getTheme('cosmos');
   const [tab, setTab] = useState('today'); // today | signe
   const [signe, setSigne] = useState('Lion');
+  const [hDuJour, setHDuJour] = useState(null);
+  const [chargementEnCours, setChargementEnCours] = useState(true);
+  const [regenerationEnCours, setRegenerationEnCours] = useState(false);
+  const [sourceHoroscope, setSourceHoroscope] = useState(null);
 
   useEffect(() => {
     getData('profil').then(p => {
@@ -39,10 +46,24 @@ export default function HoroscopeScreen({ navigation }) {
     });
   }, []);
 
+  const chargerHoroscope = useCallback(async (signeActuel, forcer = false) => {
+    if (forcer) setRegenerationEnCours(true);
+    else setChargementEnCours(true);
+    const [keys, provider] = await Promise.all([getAllApiKeys(), getActiveAiProvider()]);
+    const { desc, lucky, source } = await getHoroscopeDuJour(signeActuel, provider, keys || {}, forcer);
+    setHDuJour({ desc, lucky });
+    setSourceHoroscope(source);
+    setChargementEnCours(false);
+    setRegenerationEnCours(false);
+  }, []);
+
+  useFocusEffect(useCallback(() => { chargerHoroscope(signe); }, [signe, chargerHoroscope]));
+
   const selectSigne = async s => {
     setSigne(s);
     const profil = (await getData('profil')) || {};
     await setData('profil', { ...profil, signe: s });
+    chargerHoroscope(s);
   };
 
   const h = HOROSCOPE_DATA[signe] || HOROSCOPE_DATA['Lion'];
@@ -76,13 +97,34 @@ export default function HoroscopeScreen({ navigation }) {
               <Text style={styles.signeName}>{signe}</Text>
               <View style={styles.chipsRow}>
                 <Chip label={h.element} color={h.color} />
-                <Chip label={`Chance : ${h.lucky}`} color={PALETTE.orange} />
+                <Chip label={`Chance : ${chargementEnCours ? '...' : hDuJour?.lucky || h.lucky}`} color={PALETTE.orange} />
               </View>
             </View>
 
-            <View style={[styles.descBox, { backgroundColor: h.color + '12', borderColor: h.color + '33' }]}>
-              <Text style={styles.descText}>{h.desc}</Text>
-            </View>
+            {chargementEnCours ? (
+              <View style={[styles.descBox, { backgroundColor: h.color + '12', borderColor: h.color + '33', alignItems: 'center' }]}>
+                <ActivityIndicator color={h.color} size="small" />
+              </View>
+            ) : (
+              <View style={[styles.descBox, { backgroundColor: h.color + '12', borderColor: h.color + '33' }]}>
+                <Text style={styles.descText}>{hDuJour?.desc || h.desc}</Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={[styles.refreshBtn, { borderColor: h.color + '44' }]}
+              onPress={() => chargerHoroscope(signe, true)}
+              disabled={regenerationEnCours || chargementEnCours}
+            >
+              {regenerationEnCours ? (
+                <ActivityIndicator color={h.color} size="small" />
+              ) : (
+                <Text style={{ color: h.color, fontSize: 11 }}>🔄 Régénérer l'horoscope du jour</Text>
+              )}
+            </TouchableOpacity>
+            {sourceHoroscope === 'offline' && (
+              <Text style={styles.offlineNote}>💡 Configure une IA dans Paramètres → 🔑 API pour un horoscope encore plus personnalisé chaque jour.</Text>
+            )}
 
             <View style={styles.domainsGrid}>
               {[
@@ -169,6 +211,8 @@ const styles = StyleSheet.create({
   coachBox: { borderRadius: 12, padding: 13, borderWidth: 1 },
   coachLabel: { fontSize: 11, fontWeight: '600', marginBottom: 4 },
   coachText: { fontSize: 12, color: '#ccc', lineHeight: 18 },
+  refreshBtn: { marginTop: 10, padding: 10, borderRadius: 10, borderWidth: 1, alignItems: 'center' },
+  offlineNote: { fontSize: 10, color: '#555566', textAlign: 'center', marginTop: 10, lineHeight: 15 },
   signesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   signeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 2 },
   comingSoon: { fontSize: 11, color: '#333344', textAlign: 'center', marginTop: 18, lineHeight: 16 },

@@ -24,7 +24,8 @@ import { AI_PROVIDERS, getActiveAiProvider, getActiveKiraIcon, getAllApiKeys } f
 import { estConnecteAGoogle } from '../utils/googleAuth';
 import { creerEvenementGoogle, supprimerEvenementGoogle } from '../utils/googleCalendar';
 import { analyzeContext } from '../utils/kiraBrain';
-import { detecterAjoutCourse, detecterAjoutNote, detecterCreationEvenement, detecterDemandeActualites, detecterDemandeTraduction, detecterMemorisation, detecterOubliMemoire, detecterSuppressionEvenement } from '../utils/kiraIntents';
+import { detecterAjoutCourse, detecterAjoutNote, detecterCreationEvenement, detecterDemandeActualites, detecterDemandeBriefing, detecterDemandeTraduction, detecterMemorisation, detecterOubliMemoire, detecterSuppressionEvenement } from '../utils/kiraIntents';
+import { genererTexteBriefing } from '../utils/kiraBriefing';
 import { memoriserFait, oublierTout } from '../utils/kiraMemoire';
 import { getActualites } from '../utils/newsCaller';
 import { getData, setData } from '../utils/storage';
@@ -34,6 +35,7 @@ import { demanderPermissionMicro, ecouterUneCommande, verifierPermissionMicro } 
 
 const SUGGESTIONS = [
   'Résume ma journée 💪',
+  '🎙️ Mon briefing audio',
   'Conseils guitare 🎸',
   'Mon horoscope du jour ✨',
   'Quel temps fait-il ? ⛅',
@@ -301,6 +303,25 @@ export default function KiraChatScreen({ navigation }) {
       const reponse = `📝 C'est noté ! J'ai ajouté ça dans tes notes : "${texteNote}"`;
       const withReply = [...withUser, { r: 'ai', t: reponse }];
       await persistChat(withReply);
+      setLoading(false);
+      return;
+    }
+
+    // ── Briefing audio (lot 48) ──
+    if (detecterDemandeBriefing(msg)) {
+      const meteoCache = (await getData('widget_meteo')) || { temp: null, icon: '⛅' };
+      const texteBriefing = genererTexteBriefing({
+        prenom: appState.profil?.prenom || appState.profil?.nom || '',
+        heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        kiraState: appState.kiraState,
+        meteo: meteoCache,
+        agenda: appState.agenda,
+        sante: appState.sante,
+        dicton: null,
+      });
+      const withReply = [...withUser, { r: 'ai', t: texteBriefing }];
+      await persistChat(withReply);
+      Speech.speak(texteBriefing, { language: 'fr-FR' });
       setLoading(false);
       return;
     }

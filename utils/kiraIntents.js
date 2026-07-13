@@ -239,3 +239,12 @@ export function detecterAjoutNote(message) {
 
   return texte;
 }
+
+/**
+ * Détecte une demande de briefing audio (lot 48) : "fais-moi mon briefing",
+ * "mon briefing du matin", "briefing audio", "raconte-moi ma journée"...
+ */
+export function detecterDemandeBriefing(message) {
+  const low = message.toLowerCase();
+  return ['briefing', 'mon récap audio', 'raconte-moi ma journée', 'lis-moi mon résumé'].some(m => low.includes(m));
+}

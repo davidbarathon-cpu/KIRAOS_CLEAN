@@ -28,6 +28,7 @@ import { getCustomModules, versEntreeModuleAccueil } from '../utils/customModule
 import { getAllApiKeys } from '../utils/apiKeys';
 import { getMeteoReelle } from '../utils/weatherCaller';
 import { cacherMeteoPourWidget, refreshKiraWidget } from '../utils/widgetUpdater';
+import { genererTexteBriefing, lireBriefing } from '../utils/kiraBriefing';
 
 const DICTONS = [
   { t: 'La musique est la sténographie des émotions.', a: 'Tolstoï' },
@@ -66,6 +67,7 @@ export default function HomeScreen({ navigation }) {
   const [modulesActifs, setModulesActifs] = useState(TOUS_MODULES.map(m => m.id));
   const [modulesPersonnalises, setModulesPersonnalises] = useState([]);
   const [meteo, setMeteo] = useState({ temp: null, icon: '⛅' });
+  const [briefingEnCours, setBriefingEnCours] = useState(false);
   const dernierAppelMeteo = useRef(0);
 
   const QUINZE_MINUTES_MS = 15 * 60 * 1000;
@@ -128,6 +130,28 @@ export default function HomeScreen({ navigation }) {
   const kColor = KIRA_STATE_COLORS[kiraState];
   const kLabel = KIRA_STATE_LABELS[kiraState];
 
+  const lancerBriefing = async () => {
+    if (briefingEnCours) {
+      lireBriefing(''); // toggle : arrête la lecture en cours
+      setBriefingEnCours(false);
+      return;
+    }
+    const profil = await getData('profil');
+    const texte = genererTexteBriefing({
+      prenom: profil?.prenom || profil?.nom || '',
+      heure,
+      kiraState,
+      meteo,
+      agenda,
+      sante,
+      dicton,
+    });
+    lireBriefing(texte, {
+      onDebut: () => setBriefingEnCours(true),
+      onFin: () => setBriefingEnCours(false),
+    });
+  };
+
   const modulesAffiches = TOUS_MODULES.filter(m => modulesActifs.includes(m.id));
   // Les modules personnalisés s'ajoutent toujours à la grille (pas de filtre
   // modulesActifs sur eux — l'utilisateur les supprime depuis le constructeur
@@ -170,6 +194,9 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.stateText}>
               Kira en mode <Text style={{ color: kColor, fontWeight: '700' }}>{kLabel}</Text>
             </Text>
+            <TouchableOpacity onPress={lancerBriefing} style={styles.briefingBtn}>
+              <Text style={{ fontSize: 12 }}>{briefingEnCours ? '⏹' : '🎙️'}</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.ringsRow}>
@@ -273,7 +300,8 @@ const styles = StyleSheet.create({
   settingsBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },
   stateBar: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, marginBottom: 12 },
   statePulse: { width: 7, height: 7, borderRadius: 4, marginRight: 8 },
-  stateText: { fontSize: 11, color: '#888899' },
+  stateText: { fontSize: 11, color: '#888899', flex: 1 },
+  briefingBtn: { width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
   ringsRow: { flexDirection: 'row', justifyContent: 'space-around' },
   ringItem: { alignItems: 'center' },
   ringLabel: { fontSize: 9, color: '#444455', marginTop: 3 },

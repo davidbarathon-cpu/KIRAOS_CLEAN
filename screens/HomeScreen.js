@@ -68,6 +68,7 @@ export default function HomeScreen({ navigation }) {
   const [modulesPersonnalises, setModulesPersonnalises] = useState([]);
   const [meteo, setMeteo] = useState({ temp: null, icon: '⛅' });
   const [briefingEnCours, setBriefingEnCours] = useState(false);
+  const [modeEco, setModeEco] = useState(false);
   const dernierAppelMeteo = useRef(0);
 
   const QUINZE_MINUTES_MS = 15 * 60 * 1000;
@@ -120,9 +121,16 @@ export default function HomeScreen({ navigation }) {
   useFocusEffect(useCallback(() => { loadData(); setNow(new Date()); }, [loadData]));
 
   useEffect(() => {
-    const iv = setInterval(() => setNow(new Date()), 30000);
-    return () => clearInterval(iv);
+    getData('prefs').then(p => setModeEco(!!p?.modeEco));
   }, []);
+
+  useEffect(() => {
+    // Mode Éco (lot 50) : l'horloge se rafraîchit moins souvent (2 min
+    // au lieu de 30s) — un détail, mais ça évite un rendu inutile toutes
+    // les 30 secondes en continu sur l'écran le plus visité de l'app.
+    const iv = setInterval(() => setNow(new Date()), modeEco ? 120000 : 30000);
+    return () => clearInterval(iv);
+  }, [modeEco]);
 
   const heure = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });

@@ -413,6 +413,18 @@ export default function ParametresScreen({ navigation }) {
             </View>
           ))}
 
+          <View style={[styles.notifCard, { borderColor: prefs.modeEco ? PALETTE.green + '35' : 'rgba(255,255,255,0.06)', marginTop: 14 }]}>
+            <View style={styles.notifCardHeader}>
+              <Text style={styles.toggleLabel}>🔋 Mode Économie de batterie</Text>
+              <Toggle value={!!prefs.modeEco} onChange={v => updatePref('modeEco', v)} color={accent} />
+            </View>
+            <Text style={styles.infoSmall}>
+              Coupe l'icône animée de Kira (pulsations, rotation, étincelles) et les animations
+              météo à l'écran, partout dans l'app. Kira reste entièrement fonctionnelle — seul
+              le superflu visuel est désactivé pour économiser de la batterie.
+            </Text>
+          </View>
+
           {Platform.OS === 'android' && (
             <View style={{ marginTop: 20 }}>
               <SectionLabel>🖼️ Widget écran d'accueil</SectionLabel>

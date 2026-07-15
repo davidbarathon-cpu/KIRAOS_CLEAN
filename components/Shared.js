@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 import { getActiveKiraIcon } from '../utils/apiKeys';
+import { getData } from '../utils/storage';
 import { PALETTE } from '../utils/theme';
 import KiraIcon from './KiraIcon';
 import PremiumIcon from './PremiumIcon';
@@ -150,15 +151,17 @@ export function ModuleCard({ icon, label, desc, color, onPress, theme }) {
 // étoile fixe codée en dur.
 export function KiraFAB({ onPress, color = PALETTE.purple, kiraState }) {
   const [iconId, setIconId] = useState('etoile');
+  const [modeEco, setModeEco] = useState(false);
 
   useEffect(() => {
     getActiveKiraIcon().then(setIconId);
+    getData('prefs').then(p => setModeEco(!!p?.modeEco));
   }, []);
 
   return (
     <View style={styles.fabWrap}>
       <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={styles.fabTouch}>
-        <KiraIcon size={62} color={color} iconId={iconId} emojiSize={28} kiraState={kiraState} />
+        <KiraIcon size={62} color={color} iconId={iconId} emojiSize={28} kiraState={kiraState} modeEco={modeEco} />
       </TouchableOpacity>
     </View>
   );
@@ -170,12 +173,14 @@ export function KiraFAB({ onPress, color = PALETTE.purple, kiraState }) {
 // sur toutes les pages").
 export function KiraHeaderIcon({ size = 30, color = PALETTE.purple, onPress, kiraState }) {
   const [iconId, setIconId] = useState('etoile');
+  const [modeEco, setModeEco] = useState(false);
 
   useEffect(() => {
     getActiveKiraIcon().then(setIconId);
+    getData('prefs').then(p => setModeEco(!!p?.modeEco));
   }, []);
 
-  const contenu = <KiraIcon size={size} color={color} iconId={iconId} kiraState={kiraState} />;
+  const contenu = <KiraIcon size={size} color={color} iconId={iconId} kiraState={kiraState} modeEco={modeEco} />;
 
   if (!onPress) return contenu;
 

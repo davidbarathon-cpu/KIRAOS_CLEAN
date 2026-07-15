@@ -27,11 +27,13 @@ export default function EcouteRapideScreen({ navigation }) {
   const [reponseKira, setReponseKira] = useState('');
   const [erreur, setErreur] = useState(null);
   const [kiraIconActive, setKiraIconActive] = useState('etoile');
+  const [modeEco, setModeEco] = useState(false);
   const arreterEcoute = useRef(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     getActiveKiraIcon().then(setKiraIconActive);
+    getData('prefs').then(p => setModeEco(!!p?.modeEco));
     demarrer();
 
     // Permet de fermer cet écran rapide avec le bouton retour Android,
@@ -44,7 +46,7 @@ export default function EcouteRapideScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
-    if (etat === 'ecoute') {
+    if (etat === 'ecoute' && !modeEco) {
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1.3, duration: 600, useNativeDriver: true }),
@@ -52,7 +54,7 @@ export default function EcouteRapideScreen({ navigation }) {
         ])
       ).start();
     }
-  }, [etat]);
+  }, [etat, modeEco]);
 
   const demarrer = async () => {
     let permissionOk = await verifierPermissionMicro();
@@ -143,7 +145,7 @@ export default function EcouteRapideScreen({ navigation }) {
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
       <View style={styles.content}>
         <Animated.View style={{ transform: [{ scale: etat === 'ecoute' ? pulseAnim : 1 }] }}>
-          <KiraIcon size={100} color={theme.accent} iconId={kiraIconActive} emojiSize={48} />
+          <KiraIcon size={100} color={theme.accent} iconId={kiraIconActive} emojiSize={48} modeEco={modeEco} />
         </Animated.View>
 
         <Text style={styles.etatTexte}>

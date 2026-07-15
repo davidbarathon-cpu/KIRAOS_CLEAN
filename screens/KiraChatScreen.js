@@ -56,6 +56,7 @@ export default function KiraChatScreen({ navigation }) {
   const [kiraEnTrainDeParler, setKiraEnTrainDeParler] = useState(false);
   const arreterEcouteRef = React.useRef(null);
   const [apiKeys, setApiKeys] = useState({});
+  const [modeEco, setModeEco] = useState(false);
   const scrollRef = useRef(null);
 
   const chargerContexte = async () => {
@@ -74,6 +75,7 @@ export default function KiraChatScreen({ navigation }) {
     // Le réglage "Voix de Kira" (Paramètres → Kira) est activé par défaut
     // tant que l'utilisateur ne l'a pas explicitement désactivé.
     setVoixActivee(prefs?.voix !== false);
+    setModeEco(!!prefs?.modeEco);
   };
 
   useEffect(() => { chargerContexte(); }, []);
@@ -355,7 +357,7 @@ export default function KiraChatScreen({ navigation }) {
     <KeyboardAvoidingView style={[styles.root, { backgroundColor: theme.bg }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.header, { backgroundColor: theme.accent + '15', borderColor: theme.accent + '30' }]}>
         <View style={styles.avatarWrap}>
-          <KiraIcon size={42} color={theme.accent} iconId={kiraIconActive} emojiSize={20} kiraState={appState.kiraState} />
+          <KiraIcon size={42} color={theme.accent} iconId={kiraIconActive} emojiSize={20} kiraState={appState.kiraState} modeEco={modeEco} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.kiraName}>Kira</Text>
@@ -386,7 +388,7 @@ export default function KiraChatScreen({ navigation }) {
         {messages.length === 0 && (
           <View style={styles.emptyState}>
             <View style={{ marginBottom: 12 }}>
-              <KiraIcon size={64} color={theme.accent} iconId={kiraIconActive} emojiSize={30} />
+              <KiraIcon size={64} color={theme.accent} iconId={kiraIconActive} emojiSize={30} modeEco={modeEco} />
             </View>
             <Text style={styles.emptyTitle}>Bonjour ! Je suis Kira 🌟</Text>
             <Text style={styles.emptySub}>Pose-moi une question sur ta santé,{'\n'}ta guitare, ton horoscope...</Text>
@@ -396,7 +398,7 @@ export default function KiraChatScreen({ navigation }) {
         {messages.map((m, i) => (
           <View key={i} style={[styles.msgRow, { justifyContent: m.r === 'user' ? 'flex-end' : 'flex-start' }]}>
             {m.r === 'ai' && (
-              <KiraIcon size={26} color={theme.accent} iconId={kiraIconActive} emojiSize={13} />
+              <KiraIcon size={26} color={theme.accent} iconId={kiraIconActive} emojiSize={13} modeEco={modeEco} />
             )}
             <View>
               <View
@@ -418,7 +420,7 @@ export default function KiraChatScreen({ navigation }) {
 
         {loading && (
           <View style={[styles.msgRow, { justifyContent: 'flex-start' }]}>
-            <KiraIcon size={26} color={theme.accent} iconId={kiraIconActive} emojiSize={13} />
+            <KiraIcon size={26} color={theme.accent} iconId={kiraIconActive} emojiSize={13} modeEco={modeEco} />
             <View style={[styles.bubble, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
               <Text style={styles.bubbleText}>{providerInfo ? '...réflexion en cours...' : '...'}</Text>
             </View>

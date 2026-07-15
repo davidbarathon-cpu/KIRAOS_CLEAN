@@ -17,7 +17,7 @@ const VITESSE_PAR_ETAT = { rush: 0.55, flow: 1, recovery: 1.6 };
 // Couleurs du dégradé cristallin de base (bleu→violet→rose comme le K)
 const CRISTAL_DEGRADE = ['#22D3EE', '#6C63FF', '#F472B6'];
 
-export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoile', emojiSize, kiraState }) {
+export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoile', emojiSize, kiraState, modeEco = false }) {
   const config = KIRA_ICONS.find(i => i.id === iconId) || KIRA_ICONS[0];
   const couleurFinale = kiraState ? (KIRA_STATE_COLORS[kiraState] || color) : color;
   const facteurVitesse = kiraState ? (VITESSE_PAR_ETAT[kiraState] || 1) : 1;
@@ -33,6 +33,12 @@ export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoil
   const etincelle = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Mode Éco (lot 50) : Kira reste visible mais parfaitement immobile —
+    // aucune boucle Animated ne démarre, ce qui économise du CPU/de la
+    // batterie sur un composant affiché en permanence sur presque tous
+    // les écrans (bouton flottant, en-têtes...).
+    if (modeEco) return undefined;
+
     const d = facteurVitesse;
     const loops = [];
 
@@ -62,13 +68,13 @@ export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoil
 
     loops.forEach(l => l.start());
     return () => loops.forEach(l => l.stop());
-  }, [config.animation, facteurVitesse]);
+  }, [config.animation, facteurVitesse, modeEco]);
 
   const rotateInterpolated = rotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const transformOrbe = config.animation === 'rotate' || config.animation === 'pulse-glow'
+  const transformOrbe = !modeEco && (config.animation === 'rotate' || config.animation === 'pulse-glow')
     ? [{ rotate: rotateInterpolated }]
     : [];
-  const transformPulse = (config.animation === 'pulse' || config.animation === 'pulse-glow')
+  const transformPulse = !modeEco && (config.animation === 'pulse' || config.animation === 'pulse-glow')
     ? [{ scale: pulse }]
     : [];
 

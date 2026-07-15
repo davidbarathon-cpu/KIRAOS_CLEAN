@@ -211,7 +211,10 @@ export default function WeatherFX() {
 
     // Respecte le réglage utilisateur — si désactivé dans les Paramètres,
     // on ne calcule même pas d'effet, on coupe tout immédiatement.
-    if (prefs && prefs.weatherFx === false) {
+    // Le Mode Éco (lot 50) coupe aussi ces animations, même si l'utilisateur
+    // avait activé les effets météo séparément — l'économie de batterie
+    // prime tant que le mode est actif.
+    if ((prefs && prefs.weatherFx === false) || prefs?.modeEco) {
       setActif(false);
       return;
     }

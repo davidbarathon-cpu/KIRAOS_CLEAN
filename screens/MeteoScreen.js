@@ -13,6 +13,7 @@ import { BackButton, SectionLabel } from '../components/Shared';
 import { getAllApiKeys } from '../utils/apiKeys';
 import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 import { getMeteoReelle } from '../utils/weatherCaller';
 import { getPhaseLunaireActuelle, getProchainesPhasesPrincipales } from '../utils/moonPhase';
 import { cacherMeteoPourWidget, refreshKiraWidget } from '../utils/widgetUpdater';
@@ -85,7 +86,7 @@ function FrostEffect({ enabled }) {
 }
 
 export default function MeteoScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [tab, setTab] = useState('now');
   const [fxEnabled, setFxEnabled] = useState(true);
   const [meteo, setMeteo] = useState(null);

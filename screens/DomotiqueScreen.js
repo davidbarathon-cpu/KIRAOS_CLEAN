@@ -23,11 +23,12 @@ import { BackButton, KiraHeaderIcon, SectionLabel, Toggle } from '../components/
 import { DRIVERS_DISPONIBLES, getDriver, listerTousLesAppareils } from '../utils/domotiqueDrivers';
 import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 
 const ICON_PAR_TYPE = { lumiere: '💡', prise: '🔌', thermostat: '🌡️', volet: '🪟', autre: '🏠' };
 
 export default function DomotiqueScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [driversActifs, setDriversActifs] = useState(['demo']);
   const [appareils, setAppareils] = useState([]);
   const [chargement, setChargement] = useState(true);

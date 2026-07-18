@@ -6,9 +6,10 @@ import { getRecettesDuJour } from '../utils/cuisineCaller';
 import { getAllApiKeys, getActiveAiProvider, AI_PROVIDERS } from '../utils/apiKeys';
 import { getData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 
 export default function CuisineScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [recettes, setRecettes] = useState([]);
   const [recipeIdx, setRecipeIdx] = useState(null);
   const [loading, setLoading] = useState(true);

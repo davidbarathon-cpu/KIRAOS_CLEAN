@@ -19,6 +19,7 @@ import {
 import { BackButton, KiraHeaderIcon } from '../components/Shared';
 import { getActiveTraductionProvider, getAllApiKeys, setActiveTraductionProvider, TRADUCTION_PROVIDERS } from '../utils/apiKeys';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 import { traduireTexte } from '../utils/translationCaller';
 
 const LANGUES = [
@@ -34,7 +35,7 @@ const LANGUES = [
 ];
 
 export default function TraductionScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [texteSource, setTexteSource] = useState('');
   const [texteResult, setTexteResult] = useState('');
   const [resultSource, setResultSource] = useState(null);

@@ -13,6 +13,7 @@ import { getAllApiKeys, getActiveAiProvider } from '../utils/apiKeys';
 import { getHoroscopeDuJour } from '../utils/horoscopeCaller';
 import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 
 const SIGNES = ['Bélier', 'Taureau', 'Gémeaux', 'Cancer', 'Lion', 'Vierge', 'Balance', 'Scorpion', 'Sagittaire', 'Capricorne', 'Verseau', 'Poissons'];
 
@@ -32,7 +33,7 @@ export const HOROSCOPE_DATA = {
 };
 
 export default function HoroscopeScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [tab, setTab] = useState('today'); // today | signe
   const [signe, setSigne] = useState('Lion');
   const [hDuJour, setHDuJour] = useState(null);

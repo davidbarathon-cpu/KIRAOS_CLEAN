@@ -26,8 +26,8 @@ import SanteScreen from './screens/SanteScreen';
 import TraductionScreen from './screens/TraductionScreen';
 
 import { demanderPermissionNotifications } from './utils/notifications';
-import { initStorage } from './utils/storage';
-import { THEMES } from './utils/theme';
+import { getData, initStorage } from './utils/storage';
+import { getTheme, THEMES } from './utils/theme';
 import WeatherFX from './components/WeatherFX';
 
 const Stack = createNativeStackNavigator();
@@ -66,12 +66,18 @@ QuickActions.setItems([
 
 export default function App() {
   const [ready, setReady] = useState(false);
+  const [themeActif, setThemeActif] = useState(THEMES.cosmos);
   const navigationRef = useRef(null);
 
   useEffect(() => {
     (async () => {
       await initStorage();
       await demanderPermissionNotifications();
+      // ⚠️ Corrige au lot 52 : la couleur de fond de la barre de statut et
+      // du fond de navigation entre les écrans était figée sur Cosmos,
+      // même quand l'utilisateur avait choisi un autre thème.
+      const prefs = await getData('prefs');
+      if (prefs?.theme) setThemeActif(getTheme(prefs.theme));
       setReady(true);
     })();
   }, []);
@@ -101,14 +107,14 @@ export default function App() {
 
   return (
     <>
-      <StatusBar style="light" backgroundColor={THEMES.cosmos.bg} />
+      <StatusBar style="light" backgroundColor={themeActif.bg} />
       <NavigationContainer ref={navigationRef} linking={linking}>
         <Stack.Navigator
           initialRouteName="Home"
           screenOptions={{
             headerShown: false,
             animation: 'slide_from_right',
-            contentStyle: { backgroundColor: THEMES.cosmos.bg },
+            contentStyle: { backgroundColor: themeActif.bg },
           }}
         >
           <Stack.Screen name="Home" component={HomeScreen} />

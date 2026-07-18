@@ -23,11 +23,12 @@ import { BackButton, Chip, KiraHeaderIcon } from '../components/Shared';
 import { getActualitesProvidersActifs, getAllApiKeys } from '../utils/apiKeys';
 import { getActualites } from '../utils/newsCaller';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 
 const CATEGORIES = ['Tout', 'Tech', 'Santé', 'Sport', 'Musique', 'Environnement', 'Culture'];
 
 export default function ActualitesScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [filtre, setFiltre] = useState('Tout');
   const [expanded, setExpanded] = useState(null);
   const [articles, setArticles] = useState([]);

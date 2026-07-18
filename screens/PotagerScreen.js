@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 import { getData, setData } from '../utils/storage';
 import { getAllApiKeys, getActiveAiProvider, AI_PROVIDERS } from '../utils/apiKeys';
 import { analyserPlante } from '../utils/plantAnalyzer';
@@ -57,7 +58,7 @@ function migrerPlante(p) {
 }
 
 export default function PotagerScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [plantes, setPlantes] = useState([]);
   const [meteo] = useState({ temp: 22, humidite: 58 });
   const [photoUri, setPhotoUri] = useState(null);

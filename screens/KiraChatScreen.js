@@ -30,6 +30,7 @@ import { memoriserFait, oublierTout } from '../utils/kiraMemoire';
 import { getActualites } from '../utils/newsCaller';
 import { getData, setData } from '../utils/storage';
 import { getTheme, KIRA_STATE_LABELS, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 import { traduireTexte } from '../utils/translationCaller';
 import { demanderPermissionMicro, ecouterUneCommande, verifierPermissionMicro } from '../utils/voiceInput';
 
@@ -42,7 +43,7 @@ const SUGGESTIONS = [
 ];
 
 export default function KiraChatScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);

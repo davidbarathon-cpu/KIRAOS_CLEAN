@@ -19,6 +19,7 @@ import {
 } from '../utils/healthConnectService';
 import { ajouterEau, genererConseilSante, getSanteDuJour, mettreAJourSante } from '../utils/santeManager';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 import { refreshKiraWidget } from '../utils/widgetUpdater';
 
 const BOUTONS_EAU = [
@@ -27,7 +28,7 @@ const BOUTONS_EAU = [
 ];
 
 export default function SanteScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [sante, setSante] = useState({});
   const [showExport, setShowExport] = useState(false);
   const [editing, setEditing] = useState(false);

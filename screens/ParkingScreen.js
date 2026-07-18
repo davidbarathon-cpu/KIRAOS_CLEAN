@@ -24,6 +24,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { BackButton, SectionLabel } from '../components/Shared';
 import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 
 const DEFAULT_PARKING = {
   adresse: 'Rue Victor Hugo, 47300 Villeneuve-sur-Lot',
@@ -94,7 +95,7 @@ function formatDistance(metres) {
 }
 
 export default function ParkingScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [parking, setParking] = useState(DEFAULT_PARKING);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(DEFAULT_PARKING);

@@ -19,6 +19,7 @@ import {
 import { BackButton } from '../components/Shared';
 import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 
 const COLORS = [PALETTE.purple, PALETTE.orange, PALETTE.teal, PALETTE.pink, PALETTE.blue, PALETTE.violet, PALETTE.magenta, PALETTE.green];
 
@@ -28,7 +29,7 @@ const DEFAULT_NOTES = [
 ];
 
 export default function NotesScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [notes, setNotes] = useState([]);
   const [editIdx, setEditIdx] = useState(null);
   const [showAdd, setShowAdd] = useState(false);

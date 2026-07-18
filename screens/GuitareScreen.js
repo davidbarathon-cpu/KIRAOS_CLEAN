@@ -18,6 +18,7 @@ import { BackButton, Chip, SectionLabel } from '../components/Shared';
 import { enregistrerSession, getProgression, getStatistiquesGlobales } from '../utils/guitareProgression';
 import { getDefiDuJour, marquerDefiReleve } from '../utils/defisCreatifs';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 
 // Données des séries d'exercices (guitare + chant)
 const SERIES_GUITARE = [
@@ -59,7 +60,7 @@ const SERIES_CHANT = [
 ];
 
 export default function GuitareScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [tab, setTab] = useState('guitare'); // 'guitare' | 'chant'
   const [serieIdx, setSerieIdx] = useState(null);
   const [exoIdx, setExoIdx] = useState(null);

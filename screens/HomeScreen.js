@@ -24,6 +24,7 @@ import { analyzeContext, generatePredictions } from '../utils/kiraBrain';
 import { getData } from '../utils/storage';
 import { getSanteDuJour } from '../utils/santeManager';
 import { getTheme, KIRA_STATE_COLORS, KIRA_STATE_LABELS, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 import { getCustomModules, versEntreeModuleAccueil } from '../utils/customModules';
 import { getAllApiKeys } from '../utils/apiKeys';
 import { getMeteoReelle } from '../utils/weatherCaller';
@@ -56,7 +57,7 @@ const TOUS_MODULES = [
 ];
 
 export default function HomeScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [sante, setSante] = useState({});
   const [agenda, setAgenda] = useState([]);
   const [kiraState, setKiraState] = useState('flow');

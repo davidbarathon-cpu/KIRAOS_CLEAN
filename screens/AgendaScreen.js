@@ -33,11 +33,12 @@ import { creerEvenementGoogle, listerEvenementsGoogle, supprimerEvenementGoogle 
 import { getData, setData } from '../utils/storage';
 import { refreshKiraWidget } from '../utils/widgetUpdater';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 
 const COLORS = [PALETTE.purple, PALETTE.pink, PALETTE.teal, PALETTE.orange, PALETTE.blue, PALETTE.magenta];
 
 export default function AgendaScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [events, setEvents] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [newEvent, setNewEvent] = useState({ h: '09:00', t: '', l: '', c: COLORS[0] });

@@ -29,6 +29,7 @@ import {
   getCustomModuleParId,
 } from '../utils/customModules';
 import { getTheme } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 
 /**
  * Construit un nouvel élément vide conforme aux champs de la définition
@@ -44,7 +45,7 @@ function nouvelElementVide(champs) {
 
 export default function ModulePersonnaliseScreen({ navigation, route }) {
   const { moduleId } = route.params || {};
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [definition, setDefinition] = useState(null);
   const [items, setItems] = useState([]);
   const [showAdd, setShowAdd] = useState(false);

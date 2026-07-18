@@ -32,6 +32,7 @@ import {
 } from '../utils/notifications';
 import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 
 const JOURS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
@@ -44,7 +45,7 @@ const SONNERIES = ['Douce', 'Nature', 'Musique', 'Classique'];
 const FORM_VIDE = { heure: '07:00', label: '', actif: true, jours: [true, true, true, true, true, false, false], son: 'Douce' };
 
 export default function ReveilScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [alarmes, setAlarmes] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState(null); // null = mode création, sinon id de l'alarme éditée

@@ -18,10 +18,11 @@ import { analyzeContext } from '../utils/kiraBrain';
 import { detecterCreationEvenement } from '../utils/kiraIntents';
 import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 import { demanderPermissionMicro, ecouterUneCommande, verifierPermissionMicro } from '../utils/voiceInput';
 
 export default function EcouteRapideScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [etat, setEtat] = useState('init'); // init | ecoute | traitement | reponse | erreur
   const [texteEntendu, setTexteEntendu] = useState('');
   const [reponseKira, setReponseKira] = useState('');

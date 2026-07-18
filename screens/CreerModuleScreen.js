@@ -25,6 +25,7 @@ import {
   getCustomModuleParId,
 } from '../utils/customModules';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 
 const COULEURS_DISPONIBLES = Object.values(PALETTE).filter(c => c.startsWith('#'));
 const ICONES_SUGGEREES = ['⭐', '🎣', '📦', '🚗', '💪', '🎮', '📚', '🐶', '🌿', '💼', '🎨', '🏠', '✈️', '💰', '🔧', '🎬'];
@@ -32,7 +33,7 @@ const ICONES_SUGGEREES = ['⭐', '🎣', '📦', '🚗', '💪', '🎮', '📚',
 export default function CreerModuleScreen({ navigation, route }) {
   const { moduleId } = route.params || {};
   const enEdition = !!moduleId;
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
 
   const [nom, setNom] = useState('');
   const [desc, setDesc] = useState('');

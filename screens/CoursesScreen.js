@@ -16,6 +16,7 @@ import {
 import { BackButton, SectionLabel } from '../components/Shared';
 import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
+import { useKiraTheme } from '../utils/useTheme';
 
 const CATEGORIES = ['Épicerie', 'Viande', 'Légumes', 'Fruits', 'Laitiers', 'Boulangerie', 'Boissons', 'Hygiène'];
 const SUGGESTIONS_RAPIDES = ['Lait', 'Oeufs', 'Pain', 'Poulet', 'Avocat', 'Bananes', 'Riz', 'Tomates', 'Fromage'];
@@ -28,7 +29,7 @@ const DEFAULT_COURSES = [
 ];
 
 export default function CoursesScreen({ navigation }) {
-  const theme = getTheme('cosmos');
+  const theme = useKiraTheme();
   const [items, setItems] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [newItem, setNewItem] = useState({ n: '', q: '1', cat: CATEGORIES[0] });

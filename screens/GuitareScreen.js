@@ -16,6 +16,7 @@ import { useAudioPlayer } from 'expo-audio';
 import ExportPdfModal from '../components/ExportPdfModal';
 import { BackButton, Chip, SectionLabel } from '../components/Shared';
 import { enregistrerSession, getProgression, getStatistiquesGlobales } from '../utils/guitareProgression';
+import { getDefiDuJour, marquerDefiReleve } from '../utils/defisCreatifs';
 import { getTheme, PALETTE } from '../utils/theme';
 
 // Données des séries d'exercices (guitare + chant)
@@ -68,6 +69,8 @@ export default function GuitareScreen({ navigation }) {
   const [vueOnglet, setVueOnglet] = useState('series'); // 'series' | 'progression'
   const [progressionData, setProgressionData] = useState([]);
   const [statsGlobales, setStatsGlobales] = useState(null);
+  const [defi, setDefi] = useState(null);
+  const [defiChargement, setDefiChargement] = useState(false);
   const debutSessionRef = useRef(null);
   const metroRef = useRef(null);
   // Le clic du métronome : un seul lecteur, réutilisé à chaque tick via
@@ -107,6 +110,22 @@ export default function GuitareScreen({ navigation }) {
       chargerProgression();
     }
   }, [vueOnglet]);
+
+  useEffect(() => {
+    chargerDefi();
+  }, [tab]);
+
+  const chargerDefi = async (forcerNouveau = false) => {
+    setDefiChargement(true);
+    const d = await getDefiDuJour(tab, forcerNouveau);
+    setDefi(d);
+    setDefiChargement(false);
+  };
+
+  const marquerReleve = async () => {
+    await marquerDefiReleve(tab);
+    setDefi(d => ({ ...d, releve: true }));
+  };
 
   const chargerProgression = async () => {
     const [prog, stats] = await Promise.all([getProgression(), getStatistiquesGlobales()]);
@@ -320,6 +339,27 @@ export default function GuitareScreen({ navigation }) {
             </Text>
           </View>
 
+          {defi && (
+            <View style={[styles.defiBox, { borderColor: PALETTE.magenta + '40', backgroundColor: PALETTE.magenta + '0d' }]}>
+              <View style={styles.defiHeader}>
+                <Text style={[styles.defiLabel, { color: PALETTE.magenta }]}>🎲 Défi créatif du jour</Text>
+                <TouchableOpacity onPress={() => chargerDefi(true)} disabled={defiChargement}>
+                  <Text style={{ color: PALETTE.magenta, fontSize: 13 }}>🔄</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.defiTexte}>{defi.texte}</Text>
+              {defi.releve ? (
+                <View style={styles.defiReleveBadge}>
+                  <Text style={{ color: PALETTE.green, fontSize: 11, fontWeight: '700' }}>✅ Défi relevé aujourd'hui !</Text>
+                </View>
+              ) : (
+                <TouchableOpacity style={[styles.defiBtn, { backgroundColor: PALETTE.magenta }]} onPress={marquerReleve}>
+                  <Text style={{ color: '#000', fontWeight: '700', fontSize: 12 }}>Je l'ai relevé !</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
           {series.map((s, i) => (
             <TouchableOpacity
               key={s.id}
@@ -430,6 +470,12 @@ const styles = StyleSheet.create({
   kiraPlanBox: { borderRadius: 14, padding: 13, borderWidth: 1, marginBottom: 16, backgroundColor: 'rgba(255,140,50,0.08)' },
   kiraPlanLabel: { fontSize: 11, fontWeight: '600', marginBottom: 5 },
   kiraPlanText: { fontSize: 12, color: '#fff', lineHeight: 19 },
+  defiBox: { borderRadius: 14, padding: 13, borderWidth: 1, marginBottom: 16 },
+  defiHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  defiLabel: { fontSize: 11, fontWeight: '700' },
+  defiTexte: { fontSize: 13, color: '#e0e0f0', lineHeight: 19, marginBottom: 10 },
+  defiBtn: { alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 99 },
+  defiReleveBadge: { alignSelf: 'flex-start' },
   serieCard: {
     flexDirection: 'row',
     alignItems: 'center',

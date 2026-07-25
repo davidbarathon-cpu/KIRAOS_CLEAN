@@ -1,3 +1,5 @@
+import './utils/geofencingTask'; // LOT 54 — doit être chargé au tout début (règle expo-task-manager)
+
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as QuickActions from 'expo-quick-actions';
@@ -25,6 +27,7 @@ import ReveilScreen from './screens/ReveilScreen';
 import SanteScreen from './screens/SanteScreen';
 import TraductionScreen from './screens/TraductionScreen';
 
+import { getGeoKiraActif, demarrerGeoKira } from './utils/geoKira'; // LOT 54
 import { demanderPermissionNotifications } from './utils/notifications';
 import { getData, initStorage } from './utils/storage';
 import { getTheme, THEMES } from './utils/theme';
@@ -78,6 +81,14 @@ export default function App() {
       // même quand l'utilisateur avait choisi un autre thème.
       const prefs = await getData('prefs');
       if (prefs?.theme) setThemeActif(getTheme(prefs.theme));
+
+      // LOT 54 — Relance la surveillance Géo-Kira si elle était déjà active
+      // (Android arrête parfois les tâches en arrière-plan après un redémarrage
+      // du téléphone, ceci les relance à chaque ouverture de l'app).
+      getGeoKiraActif().then(actif => {
+        if (actif) demarrerGeoKira();
+      });
+
       setReady(true);
     })();
   }, []);

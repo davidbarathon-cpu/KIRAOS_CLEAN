@@ -40,7 +40,9 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Kira a besoin de ta position."
+          "locationWhenInUsePermission": "Kira a besoin de ta position.",
+          "locationAlwaysAndWhenInUsePermission": "Kira utilise ta position pour te retrouver ton stationnement (module Parking) et te souhaiter la bienvenue quand tu rentres à la maison (Géo-Kira).",
+          "isAndroidBackgroundLocationEnabled": true
         }
       ],
       "expo-web-browser",
@@ -89,6 +91,7 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",

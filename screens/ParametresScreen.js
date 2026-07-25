@@ -18,6 +18,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import GeoKiraCard from '../components/GeoKiraCard'; // LOT 54
 import KiraIcon from '../components/KiraIcon';
 import { BackButton, SectionLabel, Toggle } from '../components/Shared';
 import { refreshKiraWidget } from '../utils/widgetUpdater';
@@ -1155,6 +1156,11 @@ export default function ParametresScreen({ navigation }) {
               suffit de taper dessus.
             </Text>
           </View>
+
+          {/* ── Géo-Kira : notification d'arrivée à la maison (lot 54) ── */}
+          <SectionLabel style={{ marginTop: 18 }}>📍 Géo-Kira — Arrivée à la maison</SectionLabel>
+          <GeoKiraCard accent={accent} />
+
           <TouchableOpacity style={[styles.linkToApi, { borderColor: accent + '30' }]} onPress={() => setSection('api')}>
             <Text style={{ color: accent, fontSize: 12, fontWeight: '600' }}>🔑 Configurer les clés API de Kira →</Text>
           </TouchableOpacity>

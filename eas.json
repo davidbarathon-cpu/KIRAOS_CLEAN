@@ -6,11 +6,8 @@
 "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal",
-      "env": {
-        "EAS_BUILD_NPM_CI": "false"
-      }
-    },
+      "distribution": "internal"
+          },
     "preview": {
       "distribution": "internal"
     },

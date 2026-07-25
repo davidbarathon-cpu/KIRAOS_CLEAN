@@ -3,10 +3,13 @@
     "version": ">= 20.3.0",
     "appVersionSource": "remote"
   },
-  "build": {
+"build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EAS_BUILD_NPM_CI": "false"
+      }
     },
     "preview": {
       "distribution": "internal"

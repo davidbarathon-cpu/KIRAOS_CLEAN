@@ -70,6 +70,10 @@ export default function PotagerScreen({ navigation }) {
   const [planteCibleId, setPlanteCibleId] = useState(null); // null = nouvelle plante, sinon on complète l'historique d'une plante existante
   const [planteOuverte, setPlanteOuverte] = useState(null); // plante dont on affiche l'historique complet
   const [showAjoutManuel, setShowAjoutManuel] = useState(false);
+  const [editionDatePlantation, setEditionDatePlantation] = useState(false);
+  const [dateePlantationSaisie, setDateePlantationSaisie] = useState('');
+  const [ajoutNoteVisible, setAjoutNoteVisible] = useState(false);
+  const [noteRapideTexte, setNoteRapideTexte] = useState('');
   const [nomManuel, setNomManuel] = useState('');
 
   useEffect(() => {
@@ -198,6 +202,33 @@ export default function PotagerScreen({ navigation }) {
     setShowAjoutManuel(false);
   };
 
+  /**
+   * Journal rapide (lot 53) : ajoute une entrée légère à l'historique
+   * d'une plante sans passer par une analyse photo complète — un
+   * arrosage, une taille, ou une observation libre notée sur le vif.
+   */
+  const ajouterEvenement = (planteId, evenement, icone, note = '') => {
+    const nouvelleEntree = {
+      type: 'evenement',
+      date: new Date().toLocaleDateString('fr-FR'),
+      evenement,
+      icone,
+      note,
+    };
+    const listeMaj = plantes.map(p => (
+      p.id === planteId ? { ...p, historique: [...(p.historique || []), nouvelleEntree] } : p
+    ));
+    persist(listeMaj);
+  };
+
+  const validerDatePlantation = planteId => {
+    const listeMaj = plantes.map(p => (
+      p.id === planteId ? { ...p, datePlantation: dateePlantationSaisie.trim() } : p
+    ));
+    persist(listeMaj);
+    setEditionDatePlantation(false);
+  };
+
   const supprimerPlante = id => {
     const plante = plantes.find(p => p.id === id);
     Alert.alert(
@@ -225,7 +256,7 @@ export default function PotagerScreen({ navigation }) {
     return (
       <View style={[styles.root, { backgroundColor: theme.bg }]}>
         <View style={[styles.header, { borderColor: theme.border }]}>
-          <BackButton onPress={() => setPlanteOuverte(null)} />
+          <BackButton onPress={() => { setPlanteOuverte(null); setEditionDatePlantation(false); setAjoutNoteVisible(false); }} />
           <Text style={styles.headerTitle} numberOfLines={1}>{p.icon} {p.n}</Text>
           <TouchableOpacity onPress={() => supprimerPlante(p.id)} style={styles.deleteBtn}>
             <Text style={{ fontSize: 13 }}>🗑</Text>
@@ -236,7 +267,62 @@ export default function PotagerScreen({ navigation }) {
             <Text style={styles.resumeLabel}>Besoin en eau actuel</Text>
             <Chip label={p.eau} color={p.c} />
             <Text style={[styles.resumeProchain, { color: p.c }]}>Prochain arrosage : {p.prochain}</Text>
+
+            {editionDatePlantation ? (
+              <View style={styles.datePlantationEdit}>
+                <TextInput
+                  style={[styles.nomInput, { flex: 1, marginBottom: 0 }]}
+                  value={dateePlantationSaisie}
+                  onChangeText={setDateePlantationSaisie}
+                  placeholder="Ex: 12 mai 2026"
+                  placeholderTextColor="#555566"
+                  autoFocus
+                />
+                <TouchableOpacity onPress={() => validerDatePlantation(p.id)} style={styles.dateOkBtn}>
+                  <Text style={{ color: PALETTE.green, fontSize: 13, fontWeight: '700' }}>✓</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity onPress={() => { setDateePlantationSaisie(p.datePlantation || ''); setEditionDatePlantation(true); }} style={styles.datePlantationRow}>
+                <Text style={styles.resumePlantation}>
+                  🌱 {p.datePlantation ? `Plantée le ${p.datePlantation}` : 'Date de plantation non renseignée'}
+                </Text>
+                <Text style={{ color: theme.accent, fontSize: 11 }}>✏️</Text>
+              </TouchableOpacity>
+            )}
           </View>
+
+          {/* ── Journal rapide (lot 53) : quelques gestes du quotidien sans passer par une photo ── */}
+          <View style={styles.journalRow}>
+            <TouchableOpacity style={[styles.journalBtn, { borderColor: PALETTE.teal + '40', backgroundColor: PALETTE.teal + '12' }]} onPress={() => ajouterEvenement(p.id, 'Arrosage', '💧')}>
+              <Text style={{ color: PALETTE.teal, fontSize: 12, fontWeight: '600' }}>💧 Arrosé</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.journalBtn, { borderColor: PALETTE.orange + '40', backgroundColor: PALETTE.orange + '12' }]} onPress={() => ajouterEvenement(p.id, 'Taille', '✂️')}>
+              <Text style={{ color: PALETTE.orange, fontSize: 12, fontWeight: '600' }}>✂️ Taillé</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.journalBtn, { borderColor: theme.accent + '40', backgroundColor: theme.accent + '12' }]} onPress={() => setAjoutNoteVisible(!ajoutNoteVisible)}>
+              <Text style={{ color: theme.accent, fontSize: 12, fontWeight: '600' }}>📝 Note</Text>
+            </TouchableOpacity>
+          </View>
+
+          {ajoutNoteVisible && (
+            <View style={styles.noteRapideBox}>
+              <TextInput
+                style={styles.nomInput}
+                value={noteRapideTexte}
+                onChangeText={setNoteRapideTexte}
+                placeholder="Ex: une feuille jaunit à la base..."
+                placeholderTextColor="#555566"
+                autoFocus
+              />
+              <TouchableOpacity
+                style={[styles.saveBtn, { backgroundColor: theme.accent }]}
+                onPress={() => { ajouterEvenement(p.id, 'Observation', '📝', noteRapideTexte); setNoteRapideTexte(''); setAjoutNoteVisible(false); }}
+              >
+                <Text style={styles.saveBtnText}>Ajouter au journal</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <TouchableOpacity style={[styles.analyserBtn, { borderColor: PALETTE.green + '40' }]} onPress={() => ouvrirChoixPhoto(p.id)}>
             <Text style={{ color: PALETTE.green, fontSize: 12, fontWeight: '600' }}>📸 Nouvelle analyse pour cette plante</Text>
@@ -244,9 +330,20 @@ export default function PotagerScreen({ navigation }) {
 
           <SectionLabel style={{ marginTop: 18 }}>Historique ({(p.historique || []).length})</SectionLabel>
           {(!p.historique || p.historique.length === 0) ? (
-            <Text style={styles.emptyHistText}>Aucune analyse enregistrée pour l'instant.</Text>
+            <Text style={styles.emptyHistText}>Aucune entrée enregistrée pour l'instant.</Text>
           ) : (
-            [...p.historique].reverse().map((entree, i) => (
+            [...p.historique].reverse().map((entree, i) => {
+              if (entree.type === 'evenement') {
+                return (
+                  <View key={i} style={styles.evenementRow}>
+                    <Text style={{ fontSize: 14, marginRight: 8 }}>{entree.icone}</Text>
+                    <Text style={styles.evenementDate}>{entree.date}</Text>
+                    <Text style={styles.evenementLabel}>{entree.evenement}</Text>
+                    {entree.note ? <Text style={styles.evenementNote} numberOfLines={1}>· {entree.note}</Text> : null}
+                  </View>
+                );
+              }
+              return (
               <View key={i} style={[styles.histCard, { borderColor: (COULEUR_ETAT[entree.etatSante] || PALETTE.green) + '30' }]}>
                 <View style={styles.histHeader}>
                   <Text style={styles.histDate}>{entree.date}</Text>
@@ -266,7 +363,8 @@ export default function PotagerScreen({ navigation }) {
                   </View>
                 )}
               </View>
-            ))
+              );
+            })
           )}
         </ScrollView>
       </View>
@@ -472,6 +570,17 @@ const styles = StyleSheet.create({
   resumeBox: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: 14, borderWidth: 1, marginBottom: 12 },
   resumeLabel: { fontSize: 10, color: '#888899', marginBottom: 6 },
   resumeProchain: { fontSize: 12, fontWeight: '600', marginTop: 8 },
+  datePlantationRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
+  resumePlantation: { fontSize: 11, color: '#aab' },
+  datePlantationEdit: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
+  dateOkBtn: { paddingHorizontal: 12, paddingVertical: 10, backgroundColor: 'rgba(52,211,153,0.15)', borderRadius: 9 },
+  journalRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  journalBtn: { flex: 1, paddingVertical: 10, borderRadius: 11, borderWidth: 1, alignItems: 'center' },
+  noteRapideBox: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: 12, marginBottom: 12 },
+  evenementRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  evenementDate: { fontSize: 11, color: '#666677', width: 78 },
+  evenementLabel: { fontSize: 12, color: '#ccc', fontWeight: '600' },
+  evenementNote: { fontSize: 11, color: '#666677', marginLeft: 6, flex: 1 },
   analyserBtn: { padding: 12, borderRadius: 12, borderWidth: 1, alignItems: 'center', marginBottom: 8 },
   emptyHistText: { fontSize: 12, color: '#555566', textAlign: 'center', marginTop: 20 },
   histCard: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: 13, marginBottom: 9, borderWidth: 1 },

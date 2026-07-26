@@ -14,6 +14,7 @@ import * as TaskManager from 'expo-task-manager';
 import * as Notifications from 'expo-notifications';
 import { GEOFENCE_TASK_NAME } from './geoKira';
 import { getData, setData } from './storage';
+import { getDriver } from './domotiqueDrivers'; // LOT 57 — scène d'arrivée
 
 TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
   if (error) {
@@ -50,6 +51,7 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
       trigger: null, // null = affichage immédiat
     });
     await enregistrerEvenement('entree');
+    await declencherSceneArrivee(); // LOT 57
   } else if (estSortie) {
     await enregistrerEvenement('sortie');
     // Pas de notification à la sortie pour l'instant (évite le spam) —
@@ -62,6 +64,25 @@ async function enregistrerEvenement(type) {
   const nouvelleEntree = { type, date: new Date().toISOString() };
   const misAJour = [nouvelleEntree, ...historique].slice(0, 50); // garde les 50 derniers
   await setData('geokira_historique', misAJour);
+}
+
+/**
+ * LOT 57 — Allume automatiquement les appareils choisis par l'utilisateur
+ * comme "scène d'arrivée" (voir GeoKiraCard.js), quel que soit leur driver
+ * (Démo, Philips Hue, Tuya...). Silencieux en cas d'échec sur un appareil
+ * (ex: bridge injoignable) — n'empêche jamais la notification d'arrivée.
+ */
+async function declencherSceneArrivee() {
+  const scene = (await getData('geokira_scene_arrivee')) || [];
+  if (scene.length === 0) return;
+
+  await Promise.allSettled(
+    scene.map(({ driverId, id }) => {
+      const driver = getDriver(driverId);
+      if (!driver) return Promise.resolve();
+      return driver.allumer(id);
+    })
+  );
 }
 
 // ── Note technique ──

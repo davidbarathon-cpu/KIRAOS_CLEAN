@@ -22,6 +22,7 @@ export const GEOFENCE_TASK_NAME = 'kira-geofence-domicile';
 const CLE_DOMICILE = 'geokira_domicile'; // { lat, lng, adresse }
 const CLE_ACTIF = 'geokira_actif';       // bool
 const CLE_RAYON = 'geokira_rayon';       // mètres (100 | 200 | 500)
+const CLE_SCENE_ARRIVEE = 'geokira_scene_arrivee'; // [{ driverId, id, nom }] — lot 57
 
 const RAYON_PAR_DEFAUT = 200;
 
@@ -179,4 +180,17 @@ export async function getPositionActuelleCommeAdresse() {
  */
 export async function getHistoriqueGeoKira() {
   return (await getData('geokira_historique')) || [];
+}
+
+/**
+ * LOT 57 — Scène d'arrivée : liste des appareils domotique (tous drivers
+ * confondus) à allumer automatiquement dès que Géo-Kira détecte une entrée
+ * dans la zone domicile. Chaque entrée : { driverId, id, nom }.
+ */
+export async function getSceneArrivee() {
+  return (await getData(CLE_SCENE_ARRIVEE)) || [];
+}
+
+export async function setSceneArrivee(liste) {
+  await setData(CLE_SCENE_ARRIVEE, liste);
 }

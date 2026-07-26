@@ -450,3 +450,25 @@ d'accueil sur la plupart des lanceurs — le maximum que la plateforme permette 
 - État général : projet très avancé, quasiment tous les modules du cahier des charges initial
   fonctionnels avec de vraies API, sécurité par chiffrement en place, mémoire de Kira démarrée.
 - David choisit le widget plein écran comme priorité suivante → lot 41.
+
+### [26/07/2026] — Lot 57 : Scène domotique automatique à l'arrivée
+Suite de Géo-Kira (lot 54) — idée notée en fin de section "Prochaines pistes" du lot précédent,
+concrétisée. **Aucun rebuild natif** — réutilise `expo-task-manager` déjà installé au lot 54.
+
+**Fonctionnement :**
+- Dans Paramètres → 🌟 Kira → 📍 Géo-Kira, nouvelle liste "🏠 Scène d'arrivée" : tous les
+  appareils domotique disponibles (tous drivers actifs confondus — Démo/Hue/Tuya), avec un
+  switch par appareil.
+- Les appareils cochés s'allument automatiquement, en plus de la notification, dès que Géo-Kira
+  détecte une entrée dans la zone domicile.
+- Robuste : un appareil injoignable n'empêche jamais la notification ni les autres appareils de
+  la scène de fonctionner (`Promise.allSettled`).
+
+**Fichiers modifiés (les 3 mêmes qu'au lot 54, versions mises à jour) :**
+- `utils/geoKira.js` — `getSceneArrivee()` / `setSceneArrivee()`.
+- `utils/geofencingTask.js` — `declencherSceneArrivee()` appelée à chaque entrée détectée.
+- `components/GeoKiraCard.js` — liste des appareils avec switches, alimentée par
+  `listerTousLesAppareils()` (architecture par drivers du lot 14, réutilisée sans modification).
+
+**Note** : une fois Home Assistant connecté, ses appareils apparaîtront automatiquement dans
+cette même liste, sans rien à changer ici — c'est tout l'intérêt de l'architecture par drivers.

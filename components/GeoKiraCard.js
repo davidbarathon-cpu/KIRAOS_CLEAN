@@ -10,10 +10,13 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { PALETTE } from '../utils/theme';
 import { Toggle } from './Shared';
+import { getData } from '../utils/storage';
+import { listerTousLesAppareils } from '../utils/domotiqueDrivers';
 import {
   getDomicile, getGeoKiraActif, getRayonGeoKira, setRayonGeoKira,
   demanderPermissionsGeoKira, verifierPermissionsGeoKira,
   demarrerGeoKira, arreterGeoKira, getPositionActuelleCommeAdresse,
+  getSceneArrivee, setSceneArrivee,
 } from '../utils/geoKira';
 
 const RAYONS = [100, 200, 500];
@@ -25,6 +28,8 @@ export default function GeoKiraCard({ accent }) {
   const [chargementPosition, setChargementPosition] = useState(false);
   const [chargementActivation, setChargementActivation] = useState(false);
   const [permissionsOk, setPermissionsOk] = useState(true);
+  const [appareilsDisponibles, setAppareilsDisponibles] = useState([]); // LOT 57
+  const [sceneArrivee, setSceneArriveeState] = useState([]); // LOT 57
 
   const charger = async () => {
     const [d, a, r, p] = await Promise.all([
@@ -34,6 +39,15 @@ export default function GeoKiraCard({ accent }) {
     setActif(a);
     setRayon(r);
     setPermissionsOk(p);
+
+    // LOT 57 — charge les appareils domotique dispo + la scène déjà choisie
+    const driversActifs = (await getData('domotique_drivers_actifs')) || ['demo'];
+    const [appareils, scene] = await Promise.all([
+      listerTousLesAppareils(driversActifs),
+      getSceneArrivee(),
+    ]);
+    setAppareilsDisponibles(appareils);
+    setSceneArriveeState(scene);
   };
 
   useEffect(() => { charger(); }, []);
@@ -60,6 +74,16 @@ export default function GeoKiraCard({ accent }) {
     setRayon(r);
     await setRayonGeoKira(r);
     if (actif) await demarrerGeoKira();
+  };
+
+  // LOT 57 — ajoute/retire un appareil de la scène d'arrivée
+  const toggleAppareilScene = async appareil => {
+    const dejaDedans = sceneArrivee.some(a => a.driverId === appareil.driverId && a.id === appareil.id);
+    const misAJour = dejaDedans
+      ? sceneArrivee.filter(a => !(a.driverId === appareil.driverId && a.id === appareil.id))
+      : [...sceneArrivee, { driverId: appareil.driverId, id: appareil.id, nom: appareil.nom }];
+    setSceneArriveeState(misAJour);
+    await setSceneArrivee(misAJour);
   };
 
   const toggleActif = async v => {
@@ -141,6 +165,29 @@ export default function GeoKiraCard({ accent }) {
           ⚠️ Permission de localisation en arrière-plan manquante — réactive le switch pour la redemander.
         </Text>
       )}
+
+      {/* ── LOT 57 : Scène d'arrivée ── */}
+      <Text style={[styles.fieldLabel, { marginTop: 16 }]}>🏠 Scène d'arrivée (optionnel)</Text>
+      <Text style={styles.desc}>
+        Ces appareils s'allumeront automatiquement dès que tu rentres à la maison.
+      </Text>
+      {appareilsDisponibles.length === 0 ? (
+        <Text style={styles.desc}>
+          Aucun appareil domotique configuré pour l'instant — active un driver dans le module
+          Domotique pour pouvoir en choisir ici.
+        </Text>
+      ) : (
+        appareilsDisponibles.map(a => {
+          const inclus = sceneArrivee.some(s => s.driverId === a.driverId && s.id === a.id);
+          return (
+            <View key={`${a.driverId}-${a.id}`} style={styles.appareilRow}>
+              <Text style={{ fontSize: 15 }}>{a.driverIcon}</Text>
+              <Text style={styles.appareilNom} numberOfLines={1}>{a.nom}</Text>
+              <Toggle value={inclus} onChange={() => toggleAppareilScene(a)} color={accent} />
+            </View>
+          );
+        })
+      )}
     </View>
   );
 }
@@ -157,4 +204,6 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
   toggleLabel: { fontSize: 13, color: '#ccc' },
   permissionWarning: { fontSize: 10, color: PALETTE.pink, marginTop: 10, lineHeight: 14 },
+  appareilRow: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  appareilNom: { flex: 1, fontSize: 12, color: '#ccc' },
 });

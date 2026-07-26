@@ -472,3 +472,22 @@ concrétisée. **Aucun rebuild natif** — réutilise `expo-task-manager` déjà
 
 **Note** : une fois Home Assistant connecté, ses appareils apparaîtront automatiquement dans
 cette même liste, sans rien à changer ici — c'est tout l'intérêt de l'architecture par drivers.
+
+### [26/07/2026] — Lot 58 : Export réel des données (sauvegarde JSON)
+Correctif d'un bouton fantôme repéré en explorant Paramètres → Sécurité : "💾 Exporter mes
+données (JSON)" existait dans l'interface depuis longtemps sans le moindre `onPress` — il ne
+faisait rien. **Aucun rebuild natif** — que du JS, réutilise `expo-file-system`/`expo-sharing`
+déjà présents (mêmes libs que l'export PDF santé/guitare).
+
+**Fonctionnement :** rassemble toutes les clés AsyncStorage préfixées `kiraos_` dans un fichier
+`.json` horodaté, puis ouvre le partage natif Android (Drive, mail, etc.). Les clés API ne sont
+volontairement pas incluses (chiffrées séparément via `expo-secure-store` depuis le lot 30 —
+invisibles à AsyncStorage, donc absentes de cet export par construction, pas de risque de fuite).
+
+Le bouton "📥 Importer une sauvegarde" a été rendu honnête en attendant (message clair "bientôt
+disponible" au lieu de ne rien faire silencieusement) — l'import nécessitera un sélecteur de
+fichier natif (`expo-document-picker`) et donc un rebuild, à faire dans un lot dédié si besoin.
+
+**Fichiers créés :** `utils/dataBackup.js`
+
+**Fichiers modifiés :** `screens/ParametresScreen.js`

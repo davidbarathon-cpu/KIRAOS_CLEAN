@@ -60,6 +60,7 @@ import {
   reprogrammerQuotidienne,
   verifierPermissionNotifications,
 } from '../utils/notifications';
+import { exporterDonneesJSON } from '../utils/dataBackup'; // LOT 58
 import { getData, resetAllData, setData } from '../utils/storage';
 import { getTheme, PALETTE, THEMES } from '../utils/theme';
 
@@ -93,6 +94,7 @@ export default function ParametresScreen({ navigation }) {
   const [modulesActifs, setModulesActifs] = useState([]);
   const [modulesPersonnalises, setModulesPersonnalises] = useState([]);
   const [saved, setSaved] = useState(false);
+  const [exportEnCours, setExportEnCours] = useState(false); // LOT 58
   const [widgetMsg, setWidgetMsg] = useState(null);
   const [ecouteActive, setEcouteActive] = useState(false);
   const [ecouteChargement, setEcouteChargement] = useState(false);
@@ -284,6 +286,18 @@ export default function ParametresScreen({ navigation }) {
     } else {
       setHueMessage(`⚠️ ${erreur}`);
     }
+  };
+
+  // LOT 58 — Export réel des données (le bouton existait mais ne faisait rien)
+  const lancerExportDonnees = async () => {
+    setExportEnCours(true);
+    try {
+      const { nbCles } = await exporterDonneesJSON();
+      Alert.alert('✅ Export prêt', `${nbCles} clés de données exportées. Choisis où l'enregistrer dans le menu de partage qui s'est ouvert.`);
+    } catch (e) {
+      Alert.alert('Erreur', `L'export a échoué : ${e.message}`);
+    }
+    setExportEnCours(false);
   };
 
   const confirmReset = () => {
@@ -1239,8 +1253,12 @@ export default function ParametresScreen({ navigation }) {
             </Text>
           </View>
           <SectionLabel style={{ marginTop: 18 }}>Gestion des données</SectionLabel>
-          <TouchableOpacity style={styles.dangerBtn}><Text style={styles.dangerBtnText}>💾 Exporter mes données (JSON)</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.dangerBtn}><Text style={styles.dangerBtnText}>📥 Importer une sauvegarde</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.dangerBtn} onPress={lancerExportDonnees} disabled={exportEnCours}>
+            <Text style={styles.dangerBtnText}>{exportEnCours ? '⏳ Export en cours...' : '💾 Exporter mes données (JSON)'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.dangerBtn, { opacity: 0.5 }]} onPress={() => Alert.alert('Bientôt disponible', "L'import d'une sauvegarde n'est pas encore implémenté — seul l'export fonctionne pour l'instant (lot 58).")}>
+            <Text style={styles.dangerBtnText}>📥 Importer une sauvegarde (bientôt)</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={[styles.dangerBtn, { backgroundColor: 'rgba(255,101,132,0.12)', borderColor: 'rgba(255,101,132,0.3)' }]} onPress={confirmReset}>
             <Text style={[styles.dangerBtnText, { color: PALETTE.pink }]}>⚠️ Réinitialiser l'application</Text>
           </TouchableOpacity>

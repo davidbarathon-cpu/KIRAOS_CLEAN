@@ -491,3 +491,33 @@ fichier natif (`expo-document-picker`) et donc un rebuild, à faire dans un lot 
 **Fichiers créés :** `utils/dataBackup.js`
 
 **Fichiers modifiés :** `screens/ParametresScreen.js`
+
+### [26/07/2026] — Lot 59 : App autonome + mises à jour à distance (EAS Update)
+David signale que l'app actuelle (build `development`) nécessite de laisser l'ordinateur
+connecté (`npx expo start`) pour fonctionner — normal, c'est le mode client de développement
+utilisé depuis le début pour itérer vite pendant la construction. Mise en place du passage à un
+usage quotidien autonome.
+
+**Changement de stratégie de build/livraison à partir de maintenant :**
+- Build principal du téléphone : profil `preview` (APK autonome, distribué en interne, PAS le
+  Play Store) au lieu de `development`.
+- `expo-updates` ajouté : pour tous les lots JS-only (la grande majorité), David lance
+  `eas update --branch preview` au lieu de reconstruire — l'app se met à jour au prochain
+  lancement, sans rebuild ni ordinateur connecté en continu.
+- Les lots avec nouveau module natif (flag "⚠️ Rebuild natif obligatoire") nécessitent toujours
+  un `eas build --profile preview` classique.
+
+**Fichiers modifiés :**
+- `app.json` — `runtimeVersion` (policy `appVersion`), `updates.url` (vers le projet EAS
+  existant), plugin `expo-updates`.
+- `package.json` — dépendance `expo-updates`.
+
+**Reste à faire côté David (pas fait par Claude, pas accès à `eas.json`) :**
+- Vérifier/ajouter le profil `preview` dans `eas.json` (contenu standard donné dans le guide
+  d'installation du lot).
+- Lancer le premier `eas build --profile preview` et installer l'APK obtenu sur le téléphone.
+
+**Note pour Claude (sessions futures)** : à partir de ce lot, préciser à chaque livraison si
+elle nécessite `eas update` (JS seulement) ou `eas build` (natif) plutôt que de simplement dire
+"aucun rebuild" — les deux commandes ont un sens différent maintenant que le build autonome est
+en place.

@@ -210,7 +210,7 @@ export default function CoursesScreen({ navigation }) {
         </View>
 
         <Text style={styles.comingSoon}>
-          🚧 Dictée vocale ("Kira, ajoute du lait") arrivera avec le module micro.
+          💡 Dis ou écris "Kira, ajoute du lait" dans le chat, et je l'ajoute directement à ta liste.
         </Text>
       </ScrollView>
     </View>

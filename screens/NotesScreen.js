@@ -185,8 +185,8 @@ export default function NotesScreen({ navigation }) {
 
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
-            🚧 Une fois le module micro branché, tu pourras dire "Kira, note que..." et la note
-            apparaîtra ici automatiquement avec le badge 🌟.
+            💡 Dis ou écris "Kira, note que..." dans le chat, et la note apparaîtra ici
+            automatiquement avec le badge 🌟.
           </Text>
         </View>
       </ScrollView>

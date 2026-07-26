@@ -21,6 +21,7 @@ import * as Speech from 'expo-speech';
 import KiraIcon from '../components/KiraIcon';
 import { demanderAKira } from '../utils/aiCaller';
 import { AI_PROVIDERS, getActiveAiProvider, getActiveKiraIcon, getAllApiKeys } from '../utils/apiKeys';
+import { detecterDemandeGeoKira, genererReponseGeoKira } from '../utils/geoKiraBriefing'; // LOT 56
 import { estConnecteAGoogle } from '../utils/googleAuth';
 import { creerEvenementGoogle, supprimerEvenementGoogle } from '../utils/googleCalendar';
 import { analyzeContext } from '../utils/kiraBrain';
@@ -304,6 +305,15 @@ export default function KiraChatScreen({ navigation }) {
       const nouvelleNote = { id: Date.now(), t: titre, txt: texteNote, c: PALETTE.violet, source: 'kira' };
       await setData('notes', [...notesActuelles, nouvelleNote]);
       const reponse = `📝 C'est noté ! J'ai ajouté ça dans tes notes : "${texteNote}"`;
+      const withReply = [...withUser, { r: 'ai', t: reponse }];
+      await persistChat(withReply);
+      setLoading(false);
+      return;
+    }
+
+    // ── Géo-Kira : dernières arrivées à la maison (lot 56) ──
+    if (detecterDemandeGeoKira(msg)) {
+      const reponse = await genererReponseGeoKira();
       const withReply = [...withUser, { r: 'ai', t: reponse }];
       await persistChat(withReply);
       setLoading(false);

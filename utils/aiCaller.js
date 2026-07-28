@@ -106,7 +106,7 @@ async function appelMistral(message, appState, apiKey, modele = 'mistral-small-l
         { role: 'user', content: message },
       ],
       temperature: 0.8,
-      max_tokens: 500,
+      max_tokens: 1500, // LOT 61 — harmonisé avec Gemini (2000), évite les réponses coupées sur "plus de détails"
     }),
   });
 
@@ -141,7 +141,7 @@ async function appelClaude(message, appState, apiKey, modele = 'claude-3-5-haiku
       model: modele,
       system: systemPrompt,
       messages: [...messagesHistorique, { role: 'user', content: message }],
-      max_tokens: 500,
+      max_tokens: 1500, // LOT 61 — harmonisé, évite les réponses coupées sur "plus de détails"
     }),
   });
 
@@ -179,7 +179,7 @@ async function appelOpenAI(message, appState, apiKey, modele = 'gpt-4o-mini', hi
         { role: 'user', content: message },
       ],
       temperature: 0.8,
-      max_tokens: 500,
+      max_tokens: 1500, // LOT 61 — harmonisé, évite les réponses coupées sur "plus de détails"
     }),
   });
 

@@ -521,3 +521,60 @@ usage quotidien autonome.
 elle nécessite `eas update` (JS seulement) ou `eas build` (natif) plutôt que de simplement dire
 "aucun rebuild" — les deux commandes ont un sens différent maintenant que le build autonome est
 en place.
+
+### [28/07/2026] — Lot 60 : correctifs Potager (Gemini) + Health Connect
+David a testé les lots précédents sur le build `preview` autonome et remonte 3 problèmes :
+Potager (Gemini), Health Connect (crash), Google Agenda (OAuth 400). Ce lot traite les deux
+premiers ; l'Agenda reste ouvert (voir note en bas).
+
+**1. Potager / Gemini — cause confirmée avec certitude.**
+`maxOutputTokens: 500` était trop bas pour le JSON complet demandé (tous les champs +
+observations + 2 conseils secondaires) → Gemini coupé en plein milieu de sa réponse →
+`"JSON Parse error: Unexpected end of input"`. Remonté à 1024 tokens pour Gemini ET Claude
+(cohérence), + détection explicite du cas `finishReason === 'MAX_TOKENS'` pour ne plus jamais
+laisser ça remonter comme un crash JSON opaque.
+- **JS seulement**, livrable par `eas update`.
+
+**2. Health Connect — plantage immédiat au moment de "Connecter", sans message d'erreur.**
+Diagnostic à distance (pas de logcat fourni par David à ce stade) : il manquait le bloc
+`<queries>` dans le manifeste Android, obligatoire depuis Android 11 pour qu'une app puisse
+voir/lancer une autre app installée (ici Santé Connect) — restriction de visibilité des
+packages. C'est une étape d'installation documentée officiellement par
+`react-native-health-connect`, jamais ajoutée jusqu'ici. Le symptôme (plantage immédiat, aucun
+message JS) est cohérent avec un problème survenant avant même d'atteindre le code JavaScript.
+- **⚠️ Piste probable, pas confirmée par un vrai log** — à valider après rebuild. Si le crash
+  persiste, demander à David un `adb logcat *:E` pendant la reproduction du crash.
+- **Rebuild natif obligatoire** (modifie le manifeste Android au build).
+
+**Fichiers modifiés :**
+- `utils/plantAnalyzer.js`
+- `plugins/withHealthConnectManifest.js`
+
+**Reste ouvert — Google Agenda / OAuth "Erreur 400 : invalid_request"** : probablement lié au
+passage au build `preview` (nouvelle empreinte SHA-1 de signature, différente de celle utilisée
+sur les précédents builds `development`). Pistes données à David : vérifier que le client OAuth
+dans Google Cloud Console est bien de type "Application Android" (pas "Application Web"), et
+que la nouvelle empreinte SHA-1 du build `preview` (récupérable via `eas credentials`) est bien
+celle enregistrée dans ce client. En attente du retour de David sur ces deux points avant
+d'aller plus loin — rien à coder tant qu'on n'a pas confirmé côté Google Cloud Console.
+
+**Rappel process (à ne pas oublier)** : depuis le lot 59, `eas.json` a un profil `preview` avec
+`buildType: apk`. Toujours faire `npm install` après qu'un lot ait touché `package.json`, avant
+de lancer `eas build` (sinon `npm ci` échoue en environnement EAS — vécu au lot 59).
+
+### [28/07/2026] — Lot 61 : harmonisation des limites de réponse IA (chat)
+En corrigeant le bug de troncature Gemini du Potager (lot 60), vérification préventive du même
+type de problème ailleurs dans le projet. Trouvé dans `utils/aiCaller.js` (chat général) :
+Mistral/Claude/OpenAI limités à 500 tokens de réponse, contre 2000 déjà pour Gemini — risque de
+réponse coupée en plein milieu si l'utilisateur demande "plus de détails" à Kira (explicitement
+autorisé par le prompt système). Remonté à 1500 pour les trois, cohérent avec Gemini.
+
+**JS seulement**, livré par `eas update` (David ne peut pas rebuilder pendant quelques jours à
+ce lot).
+
+**Fichiers modifiés :** `utils/aiCaller.js`
+
+**David ne peut pas rebuilder pour l'instant** — les lots suivants doivent rester JS-only
+(`eas update`) tant qu'il n'a pas confirmé pouvoir relancer un `eas build`. Ne pas proposer de
+correctif nécessitant un nouveau module natif ou une modification de manifeste/gradle avant
+cette confirmation.

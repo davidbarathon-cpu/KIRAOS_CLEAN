@@ -70,7 +70,12 @@ async function analyserAvecGemini(imageBase64, apiKey, modele = 'gemini-2.5-flas
           ],
         },
       ],
-      generationConfig: { temperature: 0.4, maxOutputTokens: 500 },
+      // CORRECTIF LOT 60 : 500 tokens était trop bas pour le JSON complet
+      // demandé (tous les champs + observations + 2 conseils secondaires) —
+      // Gemini était coupé en plein milieu de sa réponse, ce qui cassait le
+      // JSON ("JSON Parse error: Unexpected end of input"). 1024 laisse une
+      // marge confortable même pour des observations un peu longues.
+      generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
     }),
   });
 
@@ -80,7 +85,17 @@ async function analyserAvecGemini(imageBase64, apiKey, modele = 'gemini-2.5-flas
   }
 
   const data = await res.json();
-  const texte = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const candidat = data?.candidates?.[0];
+  const texte = candidat?.content?.parts?.[0]?.text;
+
+  // CORRECTIF LOT 60 : si malgré la marge la réponse est quand même coupée
+  // (finishReason === 'MAX_TOKENS'), on le détecte explicitement plutôt que
+  // de laisser JSON.parse échouer avec un message générique — le message
+  // ci-dessous dit clairement ce qui s'est passé et invite à réessayer.
+  if (candidat?.finishReason === 'MAX_TOKENS') {
+    throw new Error("Réponse de Gemini coupée avant la fin (limite de tokens atteinte). Réessaie — c'est généralement ponctuel.");
+  }
+
   if (!texte) throw new Error('Réponse Gemini vide.');
   return texte;
 }
@@ -95,7 +110,7 @@ async function analyserAvecClaude(imageBase64, apiKey, modele = 'claude-3-5-haik
     },
     body: JSON.stringify({
       model: modele,
-      max_tokens: 500,
+      max_tokens: 1024, // LOT 60 — même correctif que Gemini, marge de sécurité
       messages: [
         {
           role: 'user',

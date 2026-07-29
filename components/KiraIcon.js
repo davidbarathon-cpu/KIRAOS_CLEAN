@@ -1,36 +1,71 @@
-// KIRAICON.JS — Icône Kira redessinée (lot 40)
-// Inspirée de l'icône d'application : orbe cristallin avec
-// dégradé bleu/violet/rose, anneaux lumineux animés, étincelle dorée.
-// Construit en SVG pur (react-native-svg), sans moteur 3D.
+// KIRAICON.JS — Icône Kira, orbe cristallin vivant (LOT 62)
+//
+// MISE À JOUR LOT 62 : la version précédente (lot 40) posait un gros
+// emoji plat (🌟, 🌀, 🔮...) par-dessus la sphère en dégradé — visuellement,
+// l'emoji écrasait tout le travail de relief/lumière en dessous et donnait
+// l'impression d'"une simple icône qui bouge". Corrections apportées,
+// toujours en SVG pur (react-native-svg), sans aucun nouveau module :
+//   1. L'emoji est réduit à un petit détail discret et lumineux au centre,
+//      au lieu de dominer toute l'icône.
+//   2. Un reflet secondaire se déplace en boucle sur la sphère, comme une
+//      vraie source de lumière qui tourne autour d'un objet 3D.
+//   3. Deux particules lumineuses orbitent en continu autour de la sphère,
+//      à des vitesses et distances différentes.
+//   4. Un anneau d'énergie fin tourne en permanence, quel que soit le type
+//      d'animation choisi (avant, seuls "rotate"/"pulse-glow" tournaient).
+// Toutes ces animations sont désactivées en Mode Éco (lot 50), comme avant.
 
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import Svg, {
   Circle, Defs, Ellipse, LinearGradient,
   RadialGradient, Stop,
 } from 'react-native-svg';
-import { KIRA_ICONS } from '../utils/apiKeys';
+import { KIRA_ICONS, getRendu3DActif } from '../utils/apiKeys';
 import { KIRA_STATE_COLORS } from '../utils/theme';
+import KiraOrb3D from './KiraOrb3D';
+
+const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
 
 const VITESSE_PAR_ETAT = { rush: 0.55, flow: 1, recovery: 1.6 };
 
 // Couleurs du dégradé cristallin de base (bleu→violet→rose comme le K)
 const CRISTAL_DEGRADE = ['#22D3EE', '#6C63FF', '#F472B6'];
 
-export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoile', emojiSize, kiraState, modeEco = false }) {
+export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoile', emojiSize, kiraState, modeEco = false, apercu = false }) {
   const config = KIRA_ICONS.find(i => i.id === iconId) || KIRA_ICONS[0];
   const couleurFinale = kiraState ? (KIRA_STATE_COLORS[kiraState] || color) : color;
   const facteurVitesse = kiraState ? (VITESSE_PAR_ETAT[kiraState] || 1) : 1;
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const idGrad = `kg${uid}`;
-  const idHalo = `kh${uid}`;
   const idAnneau = `ka${uid}`;
 
-  // Animations
+  // LOT 63 — Rendu 3D expérimental : activé uniquement si l'utilisateur l'a
+  // explicitement choisi dans Paramètres, jamais en Mode Éco (coûteux en
+  // batterie), et jamais dans une petite vignette d'aperçu (apercu=true,
+  // utilisé par le sélecteur d'icônes qui affiche 8 icônes à la fois —
+  // faire tourner 8 scènes 3D simultanément serait inutilement lourd).
+  const [rendu3D, setRendu3D] = useState(false);
+  useEffect(() => {
+    if (modeEco || apercu) {
+      setRendu3D(false);
+      return;
+    }
+    getRendu3DActif().then(setRendu3D);
+  }, [modeEco, apercu]);
+
+  // Animations existantes (lot 40)
   const pulse = useRef(new Animated.Value(1)).current;
   const rotate = useRef(new Animated.Value(0)).current;
   const halo = useRef(new Animated.Value(0.4)).current;
   const etincelle = useRef(new Animated.Value(0)).current;
+
+  // Animations nouvelles (lot 62) — toujours actives, quel que soit le
+  // type d'animation choisi, pour que CHAQUE icône paraisse vivante.
+  const lumiereMobile = useRef(new Animated.Value(0)).current;
+  const anneauEnergie = useRef(new Animated.Value(0)).current;
+  const orbite1 = useRef(new Animated.Value(0)).current;
+  const orbite2 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     // Mode Éco (lot 50) : Kira reste visible mais parfaitement immobile —
@@ -66,6 +101,25 @@ export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoil
       Animated.timing(etincelle, { toValue: 0, duration: 300, useNativeDriver: true }),
     ])));
 
+    // ── LOT 62 : animations "vivantes", indépendantes du type d'icône ──
+    // Lumière qui se déplace sur la sphère (simule une source lumineuse
+    // qui tourne autour d'un objet 3D) — pas de useNativeDriver ici car
+    // on anime des coordonnées SVG (cx/cy), pas une transform.
+    loops.push(Animated.loop(
+      Animated.timing(lumiereMobile, { toValue: 1, duration: Math.round(4200 * d), useNativeDriver: false })
+    ));
+    // Anneau d'énergie fin, tourne toujours, même pour les icônes "pulse"
+    loops.push(Animated.loop(
+      Animated.timing(anneauEnergie, { toValue: 1, duration: Math.round(7000 * d), useNativeDriver: true })
+    ));
+    // Deux particules en orbite, vitesses et sens différents
+    loops.push(Animated.loop(
+      Animated.timing(orbite1, { toValue: 1, duration: Math.round(3400 * d), useNativeDriver: true })
+    ));
+    loops.push(Animated.loop(
+      Animated.timing(orbite2, { toValue: 1, duration: Math.round(5600 * d), useNativeDriver: true })
+    ));
+
     loops.forEach(l => l.start());
     return () => loops.forEach(l => l.stop());
   }, [config.animation, facteurVitesse, modeEco]);
@@ -81,6 +135,32 @@ export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoil
   const r = size / 2;
   const cx = r;
   const cy = r;
+
+  // Trajectoire approximative en boucle pour la lumière mobile (donne
+  // l'illusion d'une source lumineuse qui balaie la surface de la sphère).
+  const lumiereCx = lumiereMobile.interpolate({
+    inputRange: [0, 0.25, 0.5, 0.75, 1],
+    outputRange: [cx - size * 0.14, cx + size * 0.1, cx + size * 0.2, cx - size * 0.02, cx - size * 0.14],
+  });
+  const lumiereCy = lumiereMobile.interpolate({
+    inputRange: [0, 0.25, 0.5, 0.75, 1],
+    outputRange: [cy - size * 0.22, cy - size * 0.28, cy - size * 0.05, cy + size * 0.12, cy - size * 0.22],
+  });
+  const lumiereOpacite = lumiereMobile.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0.5, 0.2, 0.5],
+  });
+
+  const anneauRotationDeg = anneauEnergie.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const orbite1Deg = orbite1.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const orbite2Deg = orbite2.interpolate({ inputRange: [0, 1], outputRange: ['360deg', '0deg'] }); // sens inverse
+
+  // LOT 63 — Bascule vers la vraie sphère 3D si activée. Le reste du
+  // composant (rendu SVG) sert de version par défaut et de filet de
+  // sécurité (aperçus, Mode Éco, ou si le rendu 3D n'est pas activé).
+  if (rendu3D) {
+    return <KiraOrb3D size={size} color={couleurFinale} />;
+  }
 
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
@@ -99,6 +179,18 @@ export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoil
           elevation: 8,
         }
       ]} />
+
+      {/* LOT 62 — Particule en orbite n°1 (sens horaire, proche) */}
+      {!modeEco && (
+        <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ rotate: orbite1Deg }] }]}>
+          <View style={{
+            position: 'absolute', top: -size * 0.04, left: '50%', marginLeft: -size * 0.035,
+            width: size * 0.07, height: size * 0.07, borderRadius: size * 0.07,
+            backgroundColor: CRISTAL_DEGRADE[0],
+            shadowColor: CRISTAL_DEGRADE[0], shadowOpacity: 0.9, shadowRadius: size * 0.08, elevation: 4,
+          }} />
+        </Animated.View>
+      )}
 
       {/* Orbe principal avec dégradé cristallin */}
       <Animated.View style={[
@@ -140,12 +232,21 @@ export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoil
           />
           {/* Corps de l'orbe */}
           <Circle cx={cx} cy={cy} r={r - size * 0.16} fill={`url(#${idGrad})`} />
-          {/* Reflet gloss en haut */}
+          {/* Reflet gloss fixe en haut (base du volume) */}
           <Ellipse
             cx={cx - size * 0.08} cy={cy - size * 0.22}
             rx={size * 0.22} ry={size * 0.13}
-            fill="white" fillOpacity={0.35}
+            fill="white" fillOpacity={0.22}
           />
+          {/* LOT 62 — reflet mobile : simule une lumière qui tourne sur la
+              surface de la sphère, pour un vrai effet de volume/3D */}
+          {!modeEco && (
+            <AnimatedEllipse
+              cx={lumiereCx} cy={lumiereCy}
+              rx={size * 0.12} ry={size * 0.08}
+              fill="white" fillOpacity={lumiereOpacite}
+            />
+          )}
           {/* Petite étincelle facette cristal (bas-droite) */}
           <Circle
             cx={cx + size * 0.2} cy={cy + size * 0.18}
@@ -155,6 +256,35 @@ export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoil
         </Svg>
       </Animated.View>
 
+      {/* LOT 62 — Anneau d'énergie fin, tourne toujours (même les icônes
+          "pulse" qui ne tournaient pas du tout auparavant) */}
+      {!modeEco && (
+        <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ rotate: anneauRotationDeg }] }]}>
+          <Svg width={size} height={size}>
+            <Circle
+              cx={cx} cy={cy} r={r - size * 0.03}
+              fill="none"
+              stroke={CRISTAL_DEGRADE[1]}
+              strokeWidth={size * 0.012}
+              strokeOpacity={0.55}
+              strokeDasharray={`${size * 0.15}, ${size * 0.22}`}
+            />
+          </Svg>
+        </Animated.View>
+      )}
+
+      {/* LOT 62 — Particule en orbite n°2 (sens antihoraire, plus loin) */}
+      {!modeEco && (
+        <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ rotate: orbite2Deg }] }]}>
+          <View style={{
+            position: 'absolute', bottom: -size * 0.02, left: '50%', marginLeft: -size * 0.025,
+            width: size * 0.05, height: size * 0.05, borderRadius: size * 0.05,
+            backgroundColor: '#FFD700',
+            shadowColor: '#FFD700', shadowOpacity: 0.9, shadowRadius: size * 0.06, elevation: 4,
+          }} />
+        </Animated.View>
+      )}
+
       {/* Étincelle dorée qui clignote (angle haut-droit comme dans le K) */}
       <Animated.View style={{
         position: 'absolute',
@@ -162,15 +292,25 @@ export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoil
         right: size * 0.06,
         opacity: etincelle,
       }}>
-        <Text style={{ fontSize: size * 0.2, color: '#FFD700' }}>✦</Text>
+        <Text style={{ fontSize: size * 0.14, color: '#FFD700' }}>✦</Text>
       </Animated.View>
 
-      {/* Emoji central */}
-      <Text style={{
-        position: 'absolute',
-        fontSize: emojiSize || size * 0.4,
-        textAlign: 'center',
-      }}>{config.emoji}</Text>
+      {/* LOT 62 — Emoji réduit à un détail discret et lumineux, plutôt
+          qu'un gros dessin plat qui écrasait la sphère en dessous. Un
+          halo doux derrière lui simule une petite gravure lumineuse. */}
+      <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
+        <View style={{
+          width: size * 0.34, height: size * 0.34, borderRadius: size * 0.34,
+          backgroundColor: 'rgba(255,255,255,0.12)',
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Text style={{
+            fontSize: emojiSize ? emojiSize * 0.6 : size * 0.24,
+            opacity: 0.85,
+            textAlign: 'center',
+          }}>{config.emoji}</Text>
+        </View>
+      </View>
     </View>
   );
 }

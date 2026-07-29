@@ -30,6 +30,7 @@ import {
   getActiveTraductionProvider,
   getActualitesProvidersActifs,
   getAllApiKeys,
+  getRendu3DActif,
   KIRA_ICONS,
   PICOVOICE_PROVIDER,
   removeApiKey,
@@ -38,6 +39,7 @@ import {
   setActiveTraductionProvider,
   setActualitesProvidersActifs,
   setApiKey,
+  setRendu3DActif,
   TRADUCTION_PROVIDERS,
   WEATHER_PROVIDER,
 } from '../utils/apiKeys';
@@ -121,6 +123,7 @@ export default function ParametresScreen({ navigation }) {
   const [traductionProviderActif, setTraductionProviderActif] = useState('deepl');
   const [actualitesProvidersActifs, setActualitesProvidersActifsState] = useState(['newsapi']);
   const [kiraIconActive, setKiraIconActiveState] = useState('etoile');
+  const [rendu3DActif, setRendu3DActifState] = useState(false); // LOT 63
   const [faitsMemorises, setFaitsMemorises] = useState([]);
 
   // Recharge les modules personnalisés chaque fois que l'écran reprend le
@@ -158,6 +161,7 @@ export default function ParametresScreen({ navigation }) {
       setTraductionProviderActif(await getActiveTraductionProvider());
       setActualitesProvidersActifsState(await getActualitesProvidersActifs());
       setKiraIconActiveState(await getActiveKiraIcon());
+      setRendu3DActifState(await getRendu3DActif()); // LOT 63
       setEcouteActive(ecoutePermanenteActive());
       setHcConnecteState(await estConnecteAHealthConnect());
       const tuyaConfig = await getTuyaConfigActuelle();
@@ -240,6 +244,11 @@ export default function ParametresScreen({ navigation }) {
   const choisirKiraIcon = async iconId => {
     setKiraIconActiveState(iconId);
     await setActiveKiraIcon(iconId);
+  };
+
+  const toggleRendu3D = async valeur => {
+    setRendu3DActifState(valeur);
+    await setRendu3DActif(valeur);
   };
 
   const sauverGoogleClientId = async () => {
@@ -1079,10 +1088,23 @@ export default function ParametresScreen({ navigation }) {
                 style={[styles.iconOption, { borderColor: kiraIconActive === icon.id ? accent : 'rgba(255,255,255,0.08)', backgroundColor: kiraIconActive === icon.id ? accent + '15' : 'rgba(255,255,255,0.03)' }]}
                 onPress={() => choisirKiraIcon(icon.id)}
               >
-                <KiraIcon size={44} color={accent} iconId={icon.id} emojiSize={20} />
+                <KiraIcon size={44} color={accent} iconId={icon.id} emojiSize={20} apercu />
                 <Text style={[styles.iconOptionLabel, { color: kiraIconActive === icon.id ? '#fff' : '#888899' }]}>{icon.nom}</Text>
               </TouchableOpacity>
             ))}
+          </View>
+
+          {/* LOT 63 — Rendu 3D expérimental (nécessite un rebuild natif, désactivé par défaut) */}
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleLabel}>🔮 Rendu 3D (expérimental)</Text>
+              <Text style={[styles.infoSmall, { marginTop: 2, marginBottom: 0 }]}>
+                Remplace l'icône Kira par une vraie sphère 3D (relief et lumière calculés en
+                temps réel). Nécessite d'avoir installé une nouvelle version de l'app avec ce
+                module — n'active que si tu as bien rebuildé après le lot 63.
+              </Text>
+            </View>
+            <Toggle value={rendu3DActif} onChange={toggleRendu3D} color={accent} />
           </View>
 
           <SectionLabel style={{ marginTop: 18 }}>🧠 Mémoire de Kira</SectionLabel>

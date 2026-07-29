@@ -578,3 +578,85 @@ ce lot).
 (`eas update`) tant qu'il n'a pas confirmé pouvoir relancer un `eas build`. Ne pas proposer de
 correctif nécessitant un nouveau module natif ou une modification de manifeste/gradle avant
 cette confirmation.
+
+### [29/07/2026] — Lot 62 : icône Kira, orbe vivant (v2)
+David trouvait l'icône de Kira trop simple ("une simple étoile qui bouge") pour une app qui se
+veut premium. En regardant le vrai fichier (`components/KiraIcon.js`, lot 40), le travail de
+fond (sphère en dégradé, anneaux, reflet gloss) était en réalité déjà soigné — le problème
+identifié : un gros emoji plat (🌟, 🌀, 🔮...) posé par-dessus écrasait visuellement tout ce
+travail, donnant l'impression d'une icône plate malgré la sphère en dessous.
+
+**JS seulement** (`react-native-svg`, déjà en place) — livré par `eas update`, aucun rebuild.
+
+**Changements :**
+- Emoji réduit à un petit détail discret et lumineux au centre (au lieu de dominer l'icône).
+- Reflet mobile qui se déplace en boucle sur la sphère (simule une source de lumière qui tourne
+  autour d'un objet 3D — l'effet le plus déterminant pour la sensation de volume).
+- Deux particules lumineuses en orbite (vitesses et sens différents).
+- Anneau d'énergie fin toujours en rotation, quel que soit le type d'animation de l'icône
+  (avant, seules les icônes "rotate"/"pulse-glow" tournaient — les icônes "pulse" restaient
+  statiques à part le battement).
+- `utils/apiKeys.js` non modifié — la liste `KIRA_ICONS` reste identique, aucun autre fichier
+  touché.
+
+**Fichiers modifiés :** `components/KiraIcon.js`
+
+**Piste notée pour plus tard (nécessite un rebuild, pas fait)** : une vraie sphère 3D rendue
+via `expo-gl` + `three.js` (relief et lumière réellement calculés, pas simulés en SVG 2D) —
+proposée à David comme évolution possible une fois qu'il pourra de nouveau rebuilder.
+
+### [29/07/2026] — Lot 63 : vraie sphère 3D pour Kira (expérimental)
+Suite du lot 62 — David a confirmé vouloir aller jusqu'à un vrai rendu 3D (pas juste simulé en
+SVG) pour l'icône de Kira, préparé maintenant pour être installé au prochain rebuild (David ne
+peut pas rebuilder ces jours-ci).
+
+**⚠️ Nouveau module natif — rebuild obligatoire, PAS un simple `eas update`.**
+**⚠️ Expérimental — n'a pas pu être testé sur un vrai appareil avant livraison.**
+
+**Choix technique :** `expo-gl` (contexte OpenGL dans une vue React Native) + `expo-three`
+(pont vers un renderer three.js) + `three` (moteur 3D pur JS). Sphère avec matériau
+`MeshPhysicalMaterial` (clearcoat, léger effet cristal), lumière ponctuelle qui se déplace
+réellement autour de la sphère (calcul réel, plus une simulation comme au lot 62), anneau fin
+en tore, deux particules en orbite — reprend la même composition visuelle que la version SVG du
+lot 62, mais avec un vrai relief et une vraie lumière calculés.
+
+**Décisions de prudence prises :**
+- Contrôlé par un interrupteur "🔮 Rendu 3D (expérimental)" dans Paramètres → 🌟 Kira,
+  **désactivé par défaut** — l'utilisateur l'active volontairement une fois le rebuild fait.
+- Le sélecteur des 8 icônes (grille de choix) reste toujours en version SVG plate (lot 62),
+  quel que soit l'état de l'interrupteur, via un nouveau prop `apercu` sur `KiraIcon` — éviter
+  de faire tourner 8 scènes 3D simultanément dans la grille de sélection.
+- Le rendu 3D est aussi automatiquement désactivé en Mode Éco (lot 50), comme le reste des
+  animations.
+- Risque connu documenté dans le code et le guide d'installation : la transparence de fond
+  d'`expo-gl` peut être limitée sur certains GPU/pilotes Android — un correctif simple (changer
+  la couleur de fond) est prévu si besoin après le premier test de David.
+
+**Fichiers créés :** `components/KiraOrb3D.js`
+
+**Fichiers modifiés :** `components/KiraIcon.js` (bascule conditionnelle SVG/3D),
+`utils/apiKeys.js` (préférence `rendu3DActif`), `screens/ParametresScreen.js` (interrupteur +
+`apercu` sur la grille de sélection).
+
+**À faire avant de builder** : `npx expo install expo-gl expo-three three` puis `npm install`
+(remet `package-lock.json` en phase, réflexe du lot 59).
+
+**Reste en attente de retour de David après son prochain rebuild** — ce lot est probablement à
+itérer une fois testé sur un vrai appareil (voir avertissements ci-dessus).
+
+### [29/07/2026] — Lot 64 : correctif double lecture vocale du briefing audio
+Passe de vérification volontaire sur `KiraChatScreen.js` (relu en entier, fichier critique
+possédé intégralement depuis le lot 56/60). Bug trouvé : le bloc "briefing audio" (lot 48)
+appelait `Speech.speak()` directement en plus de `persistChat()`, qui lit déjà automatiquement
+toute réponse de Kira à voix haute (et respecte le réglage `voixActivee`). Conséquence : le
+briefing était lu deux fois en même temps, et le deuxième appel ignorait complètement le
+réglage "Voix de Kira" désactivé.
+
+**JS seulement**, livré par `eas update`.
+
+**Fichiers modifiés :** `screens/KiraChatScreen.js` (suppression de l'appel `Speech.speak()`
+redondant dans le bloc de détection de demande de briefing).
+
+**Note pour Claude (sessions futures)** : le reste de `KiraChatScreen.js` a été relu en entier à
+cette occasion, aucun autre problème identifié dans les blocs de détection d'intention
+(traduction, actualités, agenda, mémorisation, courses, notes, Géo-Kira).

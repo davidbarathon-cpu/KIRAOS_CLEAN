@@ -179,6 +179,22 @@ export async function setActiveKiraIcon(iconId) {
 }
 
 /**
+ * LOT 63 — Rendu 3D expérimental de l'icône Kira (moteur three.js via
+ * expo-gl). Désactivé par défaut : nécessite un rebuild natif pour
+ * fonctionner, et son comportement n'a pas encore été validé sur un vrai
+ * appareil — l'utilisateur l'active volontairement une fois prêt à tester.
+ */
+export async function getRendu3DActif() {
+  const prefs = await getData('prefs');
+  return prefs?.rendu3DActif === true;
+}
+
+export async function setRendu3DActif(actif) {
+  const prefs = (await getData('prefs')) || {};
+  await setData('prefs', { ...prefs, rendu3DActif: actif });
+}
+
+/**
  * Récupère toutes les clés API stockées (objet { gemini: "...", mistral: "...", ... })
  */
 export async function getAllApiKeys() {

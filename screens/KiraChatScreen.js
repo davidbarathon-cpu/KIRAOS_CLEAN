@@ -333,8 +333,12 @@ export default function KiraChatScreen({ navigation }) {
         dicton: null,
       });
       const withReply = [...withUser, { r: 'ai', t: texteBriefing }];
+      // CORRECTIF LOT 64 : persistChat() ci-dessous lit déjà automatiquement
+      // à voix haute tout message 'ai' (et respecte le réglage "Voix de
+      // Kira"). Un appel Speech.speak() supplémentaire était fait ici juste
+      // après — ça provoquait une double lecture superposée du briefing, et
+      // ignorait le réglage voixActivee (lisait même si désactivé).
       await persistChat(withReply);
-      Speech.speak(texteBriefing, { language: 'fr-FR' });
       setLoading(false);
       return;
     }

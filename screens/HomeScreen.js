@@ -30,14 +30,7 @@ import { getAllApiKeys } from '../utils/apiKeys';
 import { getMeteoReelle } from '../utils/weatherCaller';
 import { cacherMeteoPourWidget, refreshKiraWidget } from '../utils/widgetUpdater';
 import { genererTexteBriefing, lireBriefing } from '../utils/kiraBriefing';
-
-const DICTONS = [
-  { t: 'La musique est la sténographie des émotions.', a: 'Tolstoï' },
-  { t: 'Chaque matin est une nouvelle chance de recommencer.', a: 'Proverbe' },
-  { t: "La créativité, c'est l'intelligence qui s'amuse.", a: 'Albert Einstein' },
-  { t: 'Un accord de guitare bien joué vaut mille mots.', a: 'Sagesse musicale' },
-  { t: 'Chanter, c\'est prier deux fois.', a: 'Saint Augustin' },
-];
+import { getDictonDuJour } from '../utils/dictons';
 
 const TOUS_MODULES = [
   { id: 'agenda',     icon: '📅', label: 'Agenda',         desc: 'Mes événements',     color: PALETTE.purple,  screen: 'Agenda' },
@@ -62,7 +55,10 @@ export default function HomeScreen({ navigation }) {
   const [agenda, setAgenda] = useState([]);
   const [kiraState, setKiraState] = useState('flow');
   const [predictions, setPredictions] = useState([]);
-  const [dictonIdx] = useState(Math.floor(Math.random() * DICTONS.length));
+  // BUGFIX (lot 65) : avant, le dicton était tiré au hasard à chaque ouverture de
+  // l'écran (Math.random()) — avec peu d'entrées, il semblait souvent identique.
+  // Il est maintenant fixé une fois par jour, comme dans le widget.
+  const dicton = getDictonDuJour();
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(new Date());
   const [modulesActifs, setModulesActifs] = useState(TOUS_MODULES.map(m => m.id));
@@ -135,7 +131,6 @@ export default function HomeScreen({ navigation }) {
 
   const heure = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const dicton = DICTONS[dictonIdx];
   const kColor = KIRA_STATE_COLORS[kiraState];
   const kLabel = KIRA_STATE_LABELS[kiraState];
 

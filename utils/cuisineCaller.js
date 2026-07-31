@@ -18,6 +18,10 @@ import { getData, setData } from './storage';
 import { demanderAKira } from './aiCaller';
 
 const CLE_CACHE_RECETTES = 'cuisine_recettes_cache';
+// LOT 65 : historique des titres récemment proposés par l'IA, pour éviter
+// les menus qui se répètent (voir bug ci-dessous et construirePromptRecettes).
+const CLE_HISTORIQUE_TITRES = 'cuisine_historique_titres';
+const NB_JOURS_HISTORIQUE = 10; // on évite de reproposer un titre déjà vu ces 10 derniers jours
 
 // ── Recettes de secours (mode hors-ligne ou absence de clé IA) ──
 // Organisées par catégorie, avec un choix plus large qu'avant pour
@@ -80,14 +84,25 @@ function getRecettesSecoursDuJour() {
 /**
  * Construit le prompt envoyé à l'IA pour générer le menu du jour,
  * structuré en entrée/plat/dessert (demande explicite du 11/07).
+ *
+ * BUGFIX LOT 65 : le prompt ne contenait que le jour de la semaine et le
+ * mois (ex: "ce vendredi de juillet"), donc un texte STRICTEMENT
+ * IDENTIQUE était envoyé à l'IA à chaque vendredi de juillet — plusieurs
+ * fournisseurs IA renvoient alors des menus très proches, voire
+ * identiques, pour un prompt identique. On envoie maintenant la date
+ * complète (qui ne se répète jamais), et on liste explicitement les
+ * titres récemment proposés pour demander à l'IA de ne pas les reprendre.
  */
-function construirePromptRecettes(profil) {
+function construirePromptRecettes(profil, titresRecents = []) {
   const maintenant = new Date();
-  const jourSemaine = maintenant.toLocaleDateString('fr-FR', { weekday: 'long' });
-  const mois = maintenant.toLocaleDateString('fr-FR', { month: 'long' });
+  const dateComplete = maintenant.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const prenom = profil?.prenom || 'l\'utilisateur';
 
-  return `Tu es Kira, assistante culinaire de ${prenom}. Compose un menu complet pour ce ${jourSemaine} de ${mois} : une entrée, un plat, et un dessert.
+  const consigneAntiRepetition = titresRecents.length > 0
+    ? `\n\nIMPORTANT — Ne propose AUCUNE des recettes suivantes, déjà servies récemment : ${titresRecents.join(', ')}. Sois créative et varie vraiment par rapport à ces derniers jours.`
+    : '';
+
+  return `Tu es Kira, assistante culinaire de ${prenom}. Compose un menu complet pour aujourd'hui, ${dateComplete} : une entrée, un plat, et un dessert.${consigneAntiRepetition}
 
 Réponds UNIQUEMENT avec un tableau JSON valide de 3 éléments, rien d'autre. Voici le format EXACT attendu :
 
@@ -107,7 +122,7 @@ Réponds UNIQUEMENT avec un tableau JSON valide de 3 éléments, rien d'autre. V
 
 Règles :
 - Exactement 3 éléments, dans cet ordre : Entrée, Plat, Dessert
-- Adapté à la saison (${mois}), varié par rapport à un menu classique
+- Adapté à la saison actuelle, varié par rapport à un menu classique et par rapport aux jours précédents
 - Les ingrédients doivent être faciles à trouver en France
 - Les étapes doivent être claires et détaillées
 - Le conseil de Kira doit être pratique et personnel
@@ -147,7 +162,12 @@ export async function getRecettesDuJour(appState, providerActif, apiKeys, forcer
 
   if (providerActif && apiKey && providerInfo) {
     try {
-      const prompt = construirePromptRecettes(appState.profil);
+      // BUGFIX LOT 65 : on récupère les titres des derniers jours pour
+      // demander explicitement à l'IA de ne pas les reproposer.
+      const historique = (await getData(CLE_HISTORIQUE_TITRES)) || [];
+      const titresRecents = historique.map(h => h.titre);
+
+      const prompt = construirePromptRecettes(appState.profil, titresRecents);
       const { texte, source } = await demanderAKira(
         prompt,
         { ...appState, kiraState: 'flow' },
@@ -161,6 +181,17 @@ export async function getRecettesDuJour(appState, providerActif, apiKeys, forcer
         const recettes = extraireRecettesJson(texte);
         if (Array.isArray(recettes) && recettes.length > 0) {
           await setData(CLE_CACHE_RECETTES, { date: dateAujourdhui, recettes, source: 'ia' });
+
+          // Met à jour l'historique anti-répétition : on garde les
+          // NB_JOURS_HISTORIQUE derniers jours de titres proposés (3 titres
+          // par jour : entrée/plat/dessert).
+          const titresDuJour = recettes.map(r => ({ date: dateAujourdhui, titre: r.titre })).filter(h => h.titre);
+          const historiqueMisAJour = [
+            ...historique.filter(h => h.date !== dateAujourdhui),
+            ...titresDuJour,
+          ].slice(-NB_JOURS_HISTORIQUE * 3);
+          await setData(CLE_HISTORIQUE_TITRES, historiqueMisAJour);
+
           return { recettes, source: 'ia' };
         }
       }

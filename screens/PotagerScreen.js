@@ -11,11 +11,12 @@
 //     même en cas de doute plutôt que de répondre "Non identifiée").
 // ═══════════════════════════════════════════
 
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   Alert, Image, ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { getTheme, PALETTE } from '../utils/theme';
 import { useKiraTheme } from '../utils/useTheme';
@@ -76,13 +77,17 @@ export default function PotagerScreen({ navigation }) {
   const [noteRapideTexte, setNoteRapideTexte] = useState('');
   const [nomManuel, setNomManuel] = useState('');
 
-  useEffect(() => {
-    getData('potager_plantes').then(p => {
-      const liste = p && p.length ? p.map(migrerPlante) : DEFAULT_PLANTES;
-      setPlantes(liste);
-    });
-    getActiveAiProvider().then(setProviderActif);
-  }, []);
+  // BUGFIX : même correctif que Courses/Notes/Réveil — supprimer toutes ses plantes
+  // suivies ne doit plus faire réapparaître les plantes d'exemple.
+  useFocusEffect(
+    useCallback(() => {
+      getData('potager_plantes').then(p => {
+        const liste = Array.isArray(p) ? p.map(migrerPlante) : DEFAULT_PLANTES;
+        setPlantes(liste);
+      });
+      getActiveAiProvider().then(setProviderActif);
+    }, [])
+  );
 
   const persist = async list => {
     setPlantes(list);

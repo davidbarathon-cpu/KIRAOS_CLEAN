@@ -13,7 +13,7 @@
 //     maintenant honnête sur ce que fait réellement le module.
 // ═══════════════════════════════════════════
 
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -23,6 +23,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { BackButton, Toggle } from '../components/Shared';
 import {
   annulerParCle,
@@ -52,10 +53,14 @@ export default function ReveilScreen({ navigation }) {
   const [form, setForm] = useState(FORM_VIDE);
   const [permissionOk, setPermissionOk] = useState(true);
 
-  useEffect(() => {
-    getData('alarmes').then(a => setAlarmes(a && a.length ? a : DEFAULT_ALARMES));
-    verifierPermissionNotifications().then(setPermissionOk);
-  }, []);
+  // BUGFIX : même correctif que Courses/Notes/Potager — supprimer toutes ses alarmes ne
+  // doit plus faire réapparaître les alarmes d'exemple au réouverture de l'écran.
+  useFocusEffect(
+    useCallback(() => {
+      getData('alarmes').then(a => setAlarmes(Array.isArray(a) ? a : DEFAULT_ALARMES));
+      verifierPermissionNotifications().then(setPermissionOk);
+    }, [])
+  );
 
   // ── Reprogramme une alarme réelle auprès du système Android ──
   const synchroniserNotifAlarme = async alarme => {

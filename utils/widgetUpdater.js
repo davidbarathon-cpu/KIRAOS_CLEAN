@@ -18,16 +18,11 @@
 import { Platform } from 'react-native';
 
 import { getData, setData } from './storage';
-
-// Même liste que celle de HomeScreen.js (dupliquée volontairement, voir
-// note ci-dessus) — garder les deux synchronisées si tu ajoutes un dicton.
-const DICTONS = [
-  { t: 'La musique est la sténographie des émotions.', a: 'Tolstoï' },
-  { t: 'Chaque matin est une nouvelle chance de recommencer.', a: 'Proverbe' },
-  { t: "La créativité, c'est l'intelligence qui s'amuse.", a: 'Albert Einstein' },
-  { t: 'Un accord de guitare bien joué vaut mille mots.', a: 'Sagesse musicale' },
-  { t: "Chanter, c'est prier deux fois.", a: 'Saint Augustin' },
-];
+// LOT 65 : le widget utilise désormais la même source que HomeScreen.js
+// (utils/dictons.js) — fini les deux listes dupliquées avec deux logiques
+// de sélection différentes, et fini le dicton qui changeait dans l'app
+// mais pas dans le widget (ou l'inverse).
+import { getDictonDuJour } from './dictons';
 
 /**
  * Construit l'instantané de données affiché par le widget.
@@ -60,7 +55,7 @@ export async function getKiraWidgetSnapshot() {
   else if (h >= 20 || s.som < 6) kiraState = 'recovery';
 
   const prochain = list.find(e => parseInt(e.h, 10) >= h) || null;
-  const dicton = DICTONS[now.getDate() % DICTONS.length];
+  const dicton = getDictonDuJour(now);
 
   return {
     heure,

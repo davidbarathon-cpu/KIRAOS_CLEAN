@@ -7,7 +7,7 @@
 //  pour que Kira y écrive plus tard.
 // ═══════════════════════════════════════════
 
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
     ScrollView,
     StyleSheet,
@@ -16,6 +16,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { BackButton } from '../components/Shared';
 import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
@@ -35,9 +36,13 @@ export default function NotesScreen({ navigation }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newNote, setNewNote] = useState({ t: '', txt: '', c: COLORS[0] });
 
-  useEffect(() => {
-    getData('notes').then(n => setNotes(n && n.length ? n : DEFAULT_NOTES));
-  }, []);
+  // BUGFIX : même correctif que Courses/Potager/Réveil — une liste de notes vidée par
+  // l'utilisateur ne doit plus faire réapparaître les notes d'exemple.
+  useFocusEffect(
+    useCallback(() => {
+      getData('notes').then(n => setNotes(Array.isArray(n) ? n : DEFAULT_NOTES));
+    }, [])
+  );
 
   const persist = async list => {
     setNotes(list);

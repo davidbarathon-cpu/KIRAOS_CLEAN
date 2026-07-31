@@ -4,7 +4,7 @@
 //  (la dictée vocale viendra dans une étape ultérieure)
 // ═══════════════════════════════════════════
 
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
     ScrollView,
     StyleSheet,
@@ -13,6 +13,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { BackButton, SectionLabel } from '../components/Shared';
 import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
@@ -34,9 +35,16 @@ export default function CoursesScreen({ navigation }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newItem, setNewItem] = useState({ n: '', q: '1', cat: CATEGORIES[0] });
 
-  useEffect(() => {
-    getData('courses').then(c => setItems(c && c.length ? c : DEFAULT_COURSES));
-  }, []);
+  // BUGFIX : l'ancienne condition (`c && c.length ? c : DEFAULT_COURSES`) traitait une
+  // liste vidée par l'utilisateur (tableau vide, donc "length" à 0) comme une absence de
+  // données, et réaffichait à tort les articles d'exemple. On ne retombe sur la liste de
+  // démo QUE si la donnée stockée n'est pas un tableau du tout (premier lancement ou
+  // donnée corrompue) — une liste vide reste une liste vide.
+  useFocusEffect(
+    useCallback(() => {
+      getData('courses').then(c => setItems(Array.isArray(c) ? c : DEFAULT_COURSES));
+    }, [])
+  );
 
   const persist = async list => {
     setItems(list);

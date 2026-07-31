@@ -660,3 +660,98 @@ redondant dans le bloc de détection de demande de briefing).
 **Note pour Claude (sessions futures)** : le reste de `KiraChatScreen.js` a été relu en entier à
 cette occasion, aucun autre problème identifié dans les blocs de détection d'intention
 (traduction, actualités, agenda, mémorisation, courses, notes, Géo-Kira).
+
+[29/07/2026] — Vérification sécurité : chiffrement des clés API confirmé
+
+Suite à la relecture de apiKeys.js (passe de vérification, pas un lot de code), doute soulevé sur la cohérence entre le commentaire de dataBackup.js (lot 58, "clés API chiffrées depuis le lot 30") et le fait que apiKeys.js appelle simplement getData/setData de storage.js sans rien de visiblement chiffré. David a envoyé storage.js et secureStorage.js pour vérification.
+
+Confirmé sans ambiguïté : aucun bug. storage.js redirige getData/setData/removeData de façon transparente vers secureStorage.js (Keystore Android via expo-secure-store) pour toute clé listée dans CLES_SENSIBLES (api_keys, google_jetons, spotify_jetons, hue_config) — mécanisme invisible pour tout le reste du code, exactement comme documenté. expo-secure-store est un module natif entièrement séparé d'AsyncStorage (pas juste un préfixe différent) : l'export JSON du lot 58 (AsyncStorage.getAllKeys()) ne peut donc structurellement pas voir ni inclure ces données. Le commentaire de dataBackup.js était exact.
+
+Aucun fichier modifié — vérification pure, résultat positif.
+
+### [31/07/2026] — Lot 65 : correctifs Courses/Notes/Potager/Réveil (listes vidées), dictons répétitifs, recettes Cuisine répétitives
+
+David a remonté 3 bugs après usage réel : recettes Cuisine toujours identiques, dicton de
+l'accueil qui semble toujours le même, liste de Courses qui revient aux exemples par défaut.
+**Aucun rebuild natif — pur JavaScript, déployé par `eas update`.**
+
+**Bug 1 — listes qui reviennent aux exemples (Courses signalé, mais bug identique trouvé
+et corrigé aussi dans Notes/Potager/Réveil) :**
+La condition de chargement (`c && c.length ? c : DEFAULT`) traitait un tableau VIDE (donc
+`.length === 0`, falsy) comme une absence de données, et réaffichait les exemples. Une fois
+que l'utilisateur vide complètement sa liste, elle ne devait pourtant plus jamais réafficher
+les exemples. Corrigé partout par `Array.isArray(x) ? x : DEFAULT` (un tableau vide reste
+un tableau vide). Les 4 écrans sont passés de `useEffect` à `useFocusEffect` au passage,
+pour rester cohérents avec le reste de l'app (rafraîchissement à chaque retour sur l'écran).
+
+**Bug 2 — dicton du jour répétitif :**
+`HomeScreen.js` tirait le dicton au hasard (`Math.random()`) à CHAQUE ouverture de l'écran,
+pas une fois par jour — avec seulement 5 dictons, deux tirages consécutifs tombaient souvent
+sur le même. `widgetUpdater.js` avait sa PROPRE copie de la liste avec une logique de
+sélection différente (basée sur `getDate()`), donc en plus le dicton de l'accueil et celui
+du widget pouvaient différer. Créé `utils/dictons.js` : source unique, liste passée à 20
+entrées, sélection déterministe par jour de l'année (stable toute la journée, change chaque
+jour, identique partout dans l'app).
+
+**Bug 3 — recettes Cuisine toujours similaires (avec IA configurée) :**
+Le prompt envoyé à l'IA (`construirePromptRecettes`) ne contenait que le jour de la semaine
+et le mois (ex: "ce vendredi de juillet") — texte STRICTEMENT identique à chaque vendredi du
+mois, ce qui poussait plusieurs fournisseurs IA à renvoyer des menus très proches pour un
+prompt identique. Le prompt contient maintenant la date complète (jamais deux fois
+identique), et un nouvel historique (`cuisine_historique_titres`, 10 derniers jours, 3
+titres/jour) est explicitement listé dans le prompt avec consigne de ne pas les reproposer.
+Le mode hors-ligne (rotation par seed sur la date complète, lot 47) n'avait pas ce problème
+et n'a pas été touché.
+
+**Fichiers créés :**
+- `utils/dictons.js`
+
+**Fichiers modifiés :**
+- `screens/HomeScreen.js` — dicton du jour via `getDictonDuJour()` au lieu du tirage aléatoire
+- `utils/widgetUpdater.js` — même source que l'accueil pour le dicton du widget
+- `utils/cuisineCaller.js` — prompt avec date complète + anti-répétition sur 10 jours
+- `screens/CoursesScreen.js` — fix liste vidée + `useFocusEffect`
+- `screens/NotesScreen.js` — fix liste vidée + `useFocusEffect`
+- `screens/PotagerScreen.js` — fix liste vidée + `useFocusEffect` (chargement uniquement,
+  le reste des états locaux — photo en cours, plante ouverte... — n'est pas affecté)
+- `screens/ReveilScreen.js` — fix liste vidée + `useFocusEffect`
+
+**Sujets ouverts, non traités ce lot (rappel) :**
+- OAuth Google Agenda (erreur 400) — David va vérifier son Google Cloud Console prochainement.
+- Sphère 3D de Kira (lot 63) — toujours pas testée, David ne peut pas rebuilder avant ~2
+  jours (échéance posée le 31/07/2026).
+- Home Assistant — toujours en attente du serveur physique.
+- **Nouveau, en cours côté David** : configuration Tuya/Smart Life (prises déjà en sa
+  possession) — driver déjà livré au lot 46, guide de création de projet Tuya IoT Platform +
+  liaison compte Smart Life donné à David en conversation (pas dans un fichier — à reporter
+  ici si ça devient une vraie étape du projet). En attente de retour (Client ID / Client
+  Secret / UID récupérés ou blocage rencontré).
+
+Étape 1 — Compte Tuya IoT Platform
+Va sur iot.tuya.com et crée un compte (email + mot de passe), gratuit.
+Connecte-toi.
+Étape 2 — Créer un projet Cloud
+Menu Cloud → Development → Create Cloud Project.
+Renseigne : nom libre (ex: "Kira OS"), Industry = Smart Home, Development Method = Smart Home, Data Center = Central Europe Data Center (correspond à la région "eu" déjà pré-sélectionnée dans l'app).
+Valide. Sur l'écran d'abonnement aux API qui suit, coche au minimum : IoT Core, Authorization, Device Status Notification — abonnement gratuit (essai).
+Étape 3 — Récupérer Client ID / Client Secret
+
+Une fois le projet créé, sur sa page "Overview" tu verras directement :
+
+Access ID / Client ID
+Access Secret / Client Secret
+
+Garde ces deux valeurs sous la main (ne les partage à personne d'autre que dans l'app).
+
+Étape 4 — Lier ton compte Smart Life (pour récupérer l'UID)
+Dans le projet Cloud → onglet Devices → Link Tuya App Account (ou "Link Devices By App Account").
+Choisis Automatic Link, un QR code apparaît.
+Ouvre l'app Smart Life sur ton téléphone (celle où sont déjà tes prises) → Profil → icône scan (en haut à droite) → scanne le QR code.
+Une fois lié, ton compte + tes appareils apparaissent dans la liste. À côté de ton compte lié, Tuya affiche un UID — copie-le aussi.
+Étape 5 — Entrer les 3 valeurs dans Kira OS
+
+Dans l'app : Paramètres → 🔑 API → section "🔵 Tuya / Smart Life", renseigne Client ID, Client Secret, UID, région "eu", puis Enregistrer.
+
+Étape 6 — Activer le driver
+
+Va dans le module Domotique → Écosystèmes disponibles → active le toggle "Tuya / Smart Life". Tes prises devraient apparaître dans "Mes appareils" avec bouton marche/arrêt.

@@ -13,6 +13,9 @@
       "channel": "preview",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EAS_BUILD_NPM_CI_DISABLED": "true"
       }
     },
     "production": {

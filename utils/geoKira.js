@@ -21,10 +21,23 @@ export const GEOFENCE_TASK_NAME = 'kira-geofence-domicile';
 
 const CLE_DOMICILE = 'geokira_domicile'; // { lat, lng, adresse }
 const CLE_ACTIF = 'geokira_actif';       // bool
-const CLE_RAYON = 'geokira_rayon';       // mètres (100 | 200 | 500)
+const CLE_RAYON = 'geokira_rayon';       // mètres (50 | 100 | 200 | 500)
 const CLE_SCENE_ARRIVEE = 'geokira_scene_arrivee'; // [{ driverId, id, nom }] — lot 57
+// LOT 65 — David nous a remonté deux soucis liés : des "Bon retour !" reçus en passant
+// simplement dans la rue (sans s'arrêter), et la crainte que la scène domotique (lumières)
+// s'active trop souvent pour la même raison. Trois réglages ajoutés :
+const CLE_SCENE_ACTIVE = 'geokira_scene_active';           // bool — scène domotique activée explicitement (opt-in, false par défaut)
+const CLE_NOTIF_ATTENTE = 'geokira_notif_attente';         // { notificationId, depuis } | null — voir geofencingTask.js
+const CLE_DERNIER_DECLENCHEMENT_SCENE = 'geokira_dernier_declenchement_scene'; // ISOString
 
 const RAYON_PAR_DEFAUT = 200;
+// Délai avant que la notification "Bon retour" ne soit réellement affichée — si tu
+// ressors de la zone avant (juste un passage dans la rue), elle est annulée. Voir
+// geofencingTask.js pour la logique complète.
+export const DELAI_CONFIRMATION_SECONDES = 120; // 2 minutes
+// Temps minimum entre deux déclenchements de la scène d'arrivée (lumières...), même si
+// Géo-Kira détecte plusieurs entrées rapprochées (rue passante, allers-retours...).
+export const COOLDOWN_SCENE_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
  * Récupère la position enregistrée du domicile (ou null si jamais réglée).
@@ -193,4 +206,44 @@ export async function getSceneArrivee() {
 
 export async function setSceneArrivee(liste) {
   await setData(CLE_SCENE_ARRIVEE, liste);
+}
+
+// ── LOT 65 ──────────────────────────────────────────────────────────
+// La scène domotique (allumage automatique) est maintenant désactivée par
+// défaut, même si des appareils sont déjà cochés dans la liste ci-dessus.
+// L'utilisateur doit l'activer explicitement une fois qu'il a vérifié
+// que le rayon choisi ne déclenche pas Géo-Kira au simple passage dans
+// la rue — évite les lumières qui s'allument "trop souvent" pendant la
+// phase de réglage du rayon.
+
+export async function getSceneActiveArrivee() {
+  const v = await getData(CLE_SCENE_ACTIVE);
+  return v === true;
+}
+
+export async function setSceneActiveArrivee(actif) {
+  await setData(CLE_SCENE_ACTIVE, actif);
+}
+
+/**
+ * Vérifie si le cooldown entre deux déclenchements de la scène d'arrivée est
+ * respecté (par défaut 30 min, voir COOLDOWN_SCENE_MS). Empêche les lumières
+ * de se rallumer à chaque entrée/sortie rapprochée de la zone domicile.
+ */
+export async function peutDeclencherScene() {
+  const dernier = await getData(CLE_DERNIER_DECLENCHEMENT_SCENE);
+  if (!dernier) return true;
+  return Date.now() - new Date(dernier).getTime() > COOLDOWN_SCENE_MS;
+}
+
+export async function marquerSceneDeclenchee() {
+  await setData(CLE_DERNIER_DECLENCHEMENT_SCENE, new Date().toISOString());
+}
+
+export async function getNotifAttente() {
+  return (await getData(CLE_NOTIF_ATTENTE)) || null;
+}
+
+export async function setNotifAttente(valeur) {
+  await setData(CLE_NOTIF_ATTENTE, valeur);
 }

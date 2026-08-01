@@ -17,9 +17,13 @@ import {
   demanderPermissionsGeoKira, verifierPermissionsGeoKira,
   demarrerGeoKira, arreterGeoKira, getPositionActuelleCommeAdresse,
   getSceneArrivee, setSceneArrivee,
+  getSceneActiveArrivee, setSceneActiveArrivee, // LOT 65
 } from '../utils/geoKira';
 
-const RAYONS = [100, 200, 500];
+// LOT 65 : ajout d'un rayon plus fin (50m) — un rayon de 100-200m déborde
+// souvent sur la rue devant chez soi pour une maison standard, ce qui
+// déclenchait Géo-Kira au simple passage plutôt qu'à une vraie arrivée.
+const RAYONS = [50, 100, 200, 500];
 
 export default function GeoKiraCard({ accent }) {
   const [domicile, setDomicileState] = useState(null);
@@ -30,15 +34,18 @@ export default function GeoKiraCard({ accent }) {
   const [permissionsOk, setPermissionsOk] = useState(true);
   const [appareilsDisponibles, setAppareilsDisponibles] = useState([]); // LOT 57
   const [sceneArrivee, setSceneArriveeState] = useState([]); // LOT 57
+  const [sceneActive, setSceneActiveState] = useState(false); // LOT 65 — opt-in, false par défaut
 
   const charger = async () => {
-    const [d, a, r, p] = await Promise.all([
+    const [d, a, r, p, sa] = await Promise.all([
       getDomicile(), getGeoKiraActif(), getRayonGeoKira(), verifierPermissionsGeoKira(),
+      getSceneActiveArrivee(),
     ]);
     setDomicileState(d);
     setActif(a);
     setRayon(r);
     setPermissionsOk(p);
+    setSceneActiveState(sa);
 
     // LOT 57 — charge les appareils domotique dispo + la scène déjà choisie
     const driversActifs = (await getData('domotique_drivers_actifs')) || ['demo'];
@@ -84,6 +91,13 @@ export default function GeoKiraCard({ accent }) {
       : [...sceneArrivee, { driverId: appareil.driverId, id: appareil.id, nom: appareil.nom }];
     setSceneArriveeState(misAJour);
     await setSceneArrivee(misAJour);
+  };
+
+  // LOT 65 — active/désactive explicitement la scène domotique automatique
+  // (opt-in, séparé du choix des appareils ci-dessous).
+  const toggleSceneActive = async v => {
+    setSceneActiveState(v);
+    await setSceneActiveArrivee(v);
   };
 
   const toggleActif = async v => {
@@ -140,6 +154,11 @@ export default function GeoKiraCard({ accent }) {
       </TouchableOpacity>
 
       <Text style={[styles.fieldLabel, { marginTop: 14 }]}>Rayon de détection</Text>
+      <Text style={styles.desc}>
+        Choisis le rayon le plus petit qui couvre bien ta maison, sans déborder sur la rue ou
+        chez les voisins — un rayon trop large déclenche Kira dès que tu passes à proximité,
+        pas seulement quand tu t'arrêtes vraiment chez toi.
+      </Text>
       <View style={styles.rayonRow}>
         {RAYONS.map(r => (
           <TouchableOpacity
@@ -166,10 +185,20 @@ export default function GeoKiraCard({ accent }) {
         </Text>
       )}
 
+      <Text style={styles.desc}>
+        💡 Depuis le lot 65 : la notification "Bon retour" attend 2 minutes avant de
+        s'afficher, et s'annule automatiquement si tu ressors entre-temps — un simple
+        passage devant chez toi ne devrait donc plus déclencher Kira.
+      </Text>
+
       {/* ── LOT 57 : Scène d'arrivée ── */}
       <Text style={[styles.fieldLabel, { marginTop: 16 }]}>🏠 Scène d'arrivée (optionnel)</Text>
       <Text style={styles.desc}>
-        Ces appareils s'allumeront automatiquement dès que tu rentres à la maison.
+        Ces appareils peuvent s'allumer automatiquement dès que tu rentres à la maison.
+        Choisis-les ci-dessous, PUIS active l'interrupteur "Activer la scène automatique" —
+        elle reste désactivée tant que tu ne l'as pas explicitement allumée, même si des
+        appareils sont cochés. Un délai minimum de 30 min entre deux déclenchements est aussi
+        appliqué automatiquement, pour éviter que ça s'allume trop souvent.
       </Text>
       {appareilsDisponibles.length === 0 ? (
         <Text style={styles.desc}>
@@ -187,6 +216,17 @@ export default function GeoKiraCard({ accent }) {
             </View>
           );
         })
+      )}
+
+      <View style={[styles.toggleRow, sceneArrivee.length === 0 && { opacity: 0.4 }]} pointerEvents={sceneArrivee.length === 0 ? 'none' : 'auto'}>
+        <Text style={styles.toggleLabel}>⚡ Activer la scène automatique</Text>
+        <Toggle value={sceneActive} onChange={toggleSceneActive} color={accent} />
+      </View>
+      {sceneActive && (
+        <Text style={[styles.desc, { color: accent, marginTop: 8 }]}>
+          Scène active — les appareils cochés ci-dessus s'allumeront à chaque arrivée
+          confirmée (avec un minimum de 30 min entre deux déclenchements).
+        </Text>
       )}
     </View>
   );

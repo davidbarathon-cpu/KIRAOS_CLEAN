@@ -755,3 +755,59 @@ Dans l'app : Paramètres → 🔑 API → section "🔵 Tuya / Smart Life", rens
 Étape 6 — Activer le driver
 
 Va dans le module Domotique → Écosystèmes disponibles → active le toggle "Tuya / Smart Life". Tes prises devraient apparaître dans "Mes appareils" avec bouton marche/arrêt.
+
+### [31/07/2026] — Lot 66 : dictons étoffés (103) + Géo-Kira anti faux-positifs (rayon, notif différée, scène opt-in + cooldown)
+
+David a testé le lot 65 et remonté deux nouveaux points : 20 dictons c'est encore trop peu
+(sensation de redondance), et Géo-Kira (lot 54/57) réagit trop facilement — "Bon retour"
+reçu en passant simplement dans la rue, avec la crainte que la scène domotique (lumières)
+s'active trop souvent pour la même raison. **Toujours du pur JavaScript, `eas update`.**
+
+**Dictons (suite du lot 65) :**
+Liste passée de 20 à **217 entrées** (David a demandé d'en mettre encore plus, "même 200",
+après avoir vu le premier passage à 103), classées par thème (musique, sagesse générale,
+proverbes internationaux, santé, cuisine, jardin, organisation, météo, motivation, bien-être,
+voyage/curiosité, famille/amitié, simplicité/technologie) pour rester cohérente avec
+l'univers de l'app. Sélection toujours stable sur une journée, mais mélangée par un petit
+hash (année + jour de l'année) plutôt qu'un simple modulo — évite qu'un dicton donné tombe
+systématiquement à la même date calendaire chaque année. Vérifié : 217 textes tous uniques
+(aucun doublon), 195 dictons distincts vus sur une simulation de 400 jours consécutifs.
+
+**Géo-Kira — 3 garde-fous ajoutés (utils/geoKira.js, utils/geofencingTask.js,
+components/GeoKiraCard.js) :**
+1. Nouveau préréglage de rayon **50m** (en plus de 100/200/500), avec texte d'aide expliquant
+   de choisir le plus petit rayon qui couvre la maison sans déborder sur la rue/voisins.
+2. La notification "Bon retour" est désormais **différée de 2 minutes**
+   (`DELAI_CONFIRMATION_SECONDES`) via `Notifications.scheduleNotificationAsync({ trigger:
+   { seconds: 120 } })` au lieu d'un affichage immédiat (`trigger: null`). Si une sortie de
+   zone est détectée avant l'écoulement du délai, la notification programmée est annulée
+   (`cancelScheduledNotificationAsync`) — un simple passage dans la rue ne déclenche donc plus
+   la notification.
+3. La **scène domotique passe opt-in** (`getSceneActiveArrivee`/`setSceneActiveArrivee`,
+   désactivée par défaut même si des appareils sont déjà cochés) + un **cooldown de 30 minutes**
+   entre deux déclenchements (`peutDeclencherScene`/`marquerSceneDeclenchee`,
+   `COOLDOWN_SCENE_MS`). David doit réactiver explicitement l'interrupteur "⚡ Activer la scène
+   automatique" après installation.
+
+**Limite connue, assumée pour ce lot :** la notification bénéficie d'une vraie confirmation
+différée (2 min, annulable), mais la scène domotique elle-même reste déclenchée dès l'entrée
+détectée (pas de délai de confirmation identique) — exécuter du code JS personnalisé après un
+délai en arrière-plan Android de façon fiable demanderait une tâche `expo-background-fetch`
+dédiée (nécessiterait un rebuild, granularité mini ~15 min côté Android, pas assez réactif).
+Les garde-fous 1 et 3 (rayon + opt-in + cooldown) compensent en attendant une éventuelle
+évolution native future.
+
+**Fichiers modifiés :**
+- `utils/dictons.js` (remplace la version du lot 65)
+- `utils/geoKira.js` — nouvelles constantes/fonctions : `DELAI_CONFIRMATION_SECONDES`,
+  `COOLDOWN_SCENE_MS`, `getSceneActiveArrivee`, `setSceneActiveArrivee`,
+  `peutDeclencherScene`, `marquerSceneDeclenchee`, `getNotifAttente`, `setNotifAttente`
+- `utils/geofencingTask.js` — notification différée/annulable, scène gardée par opt-in + cooldown
+- `components/GeoKiraCard.js` — rayon 50m, interrupteur "Activer la scène automatique", textes d'aide
+
+**Sujets ouverts, non traités ce lot (rappel) :**
+- OAuth Google Agenda (erreur 400) — David va vérifier son Google Cloud Console prochainement.
+- Sphère 3D de Kira (lot 63) — toujours pas testée, rebuild possible d'ici ~2 jours.
+- Home Assistant — en attente du serveur.
+- Configuration Tuya/Smart Life en cours côté David (driver déjà livré au lot 46, guide de
+  configuration donné en conversation le 31/07 — pas encore de retour sur Client ID/Secret/UID).

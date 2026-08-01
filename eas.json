@@ -1,12 +1,8 @@
 {
   "cli": {
     "version": ">= 20.3.0",
-    "appVersionSource": "remote"
-  },
-  "cliConfig": {
-    "env": {
-      "EAS_BUILD_NPM_CI_DISABLED": "true"
-    }
+    "appVersionSource": "remote",
+    "promptToConfigureWorkflow": false
   },
   "build": {
     "development": {
@@ -18,6 +14,9 @@
       "channel": "preview",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EAS_BUILD_NPM_CI_DISABLED": "true"
       }
     },
     "production": {

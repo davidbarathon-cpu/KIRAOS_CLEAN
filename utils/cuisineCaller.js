@@ -72,8 +72,18 @@ function choisirParSeed(tableau, seedTexte, decalage = 0) {
   return tableau[(hash + decalage) % tableau.length];
 }
 
-function getRecettesSecoursDuJour() {
-  const seed = new Date().toISOString().slice(0, 10); // ex: "2026-07-11"
+/**
+ * BUGFIX (01/08) : "j'appuie sur Nouvelles recettes, rien ne se passe".
+ * Cause : cette fonction ne prenait en compte QUE la date du jour comme
+ * graine — donc sans IA configurée (ou si l'appel IA échoue), forcer une
+ * régénération retombait ici et produisait EXACTEMENT le même menu qu'avant
+ * (même graine = même résultat), ce qui donnait l'impression que le bouton
+ * ne faisait rien. `variation` (optionnel) permet d'ajouter un élément qui
+ * change à chaque appel forcé, pour obtenir un vrai nouveau tirage — tout
+ * en gardant le menu stable toute la journée quand on ne force rien.
+ */
+function getRecettesSecoursDuJour(variation = '') {
+  const seed = new Date().toISOString().slice(0, 10) + variation;
   return [
     { ...choisirParSeed(ENTREES_SECOURS, seed, 0), type: 'Entrée' },
     { ...choisirParSeed(PLATS_SECOURS, seed, 1), type: 'Plat' },
@@ -200,7 +210,10 @@ export async function getRecettesDuJour(appState, providerActif, apiKeys, forcer
     }
   }
 
-  const recettesSecours = getRecettesSecoursDuJour();
+  // BUGFIX (01/08) : en forçant une régénération sans IA (ou IA en échec),
+  // on ajoute une variation (timestamp) à la graine pour obtenir un menu
+  // réellement différent — voir le commentaire de getRecettesSecoursDuJour.
+  const recettesSecours = getRecettesSecoursDuJour(forcerRegeneration ? `-${Date.now()}` : '');
   // On met aussi en cache le menu de secours, pour que le module Cuisine
   // affiche la même chose toute la journée (cohérent), et seulement un
   // nouveau menu le lendemain OU si l'utilisateur force une régénération.

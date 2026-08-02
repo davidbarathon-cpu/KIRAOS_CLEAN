@@ -811,3 +811,62 @@ Les garde-fous 1 et 3 (rayon + opt-in + cooldown) compensent en attendant une é
 - Home Assistant — en attente du serveur.
 - Configuration Tuya/Smart Life en cours côté David (driver déjà livré au lot 46, guide de
   configuration donné en conversation le 31/07 — pas encore de retour sur Client ID/Secret/UID).
+
+### [01/08/2026] — Lot 67 : réponse Gemini coupée (Potager) + bouton "Nouvelles recettes" sans effet (Cuisine)
+
+David a signalé, en même temps qu'un plantage Health Connect (voir ci-dessous, non résolu
+ce lot faute de log), deux bugs supplémentaires. **Toujours du pur JavaScript, `eas update`.**
+
+**Bug Potager — "réponse coupée juste avant que Gemini ait pu répondre" :**
+Root cause identifiée : les modèles Gemini 2.5 (dont `gemini-2.5-flash`, modèle par défaut de
+Kira) effectuent par défaut un raisonnement interne ("thinking") qui consomme une partie du
+quota `maxOutputTokens` AVANT de produire le texte visible en sortie. Avec la marge du lot 60
+(1024 tokens), ce raisonnement pouvait à lui seul épuiser tout le budget, laissant
+`finishReason: 'MAX_TOKENS'` sans qu'une seule lettre de JSON n'ait été émise — d'où le
+message d'erreur explicite déjà en place ("Réponse de Gemini coupée...") qui se déclenchait
+systématiquement. Corrigé dans `utils/plantAnalyzer.js` : ajout de
+`generationConfig.thinkingConfig: { thinkingBudget: 0 }` pour désactiver ce raisonnement
+(inutile pour une tâche de sortie JSON structurée), et remontée de `maxOutputTokens` à 2048
+par sécurité supplémentaire. Le même correctif préventif a été appliqué à `appelGemini()`
+dans `utils/aiCaller.js` (chat général de Kira, même modèle, même risque théorique bien que
+non explicitement rapporté comme buggé) — accessoirement, ça devrait aussi rendre les
+réponses de Kira plus rapides (moins de tokens "gaspillés" en réflexion invisible).
+
+**Bug Cuisine — bouton "Nouvelles recettes" sans effet apparent :**
+`getRecettesSecoursDuJour()` (mode hors-ligne / sans clé IA / IA en échec) calculait sa graine
+de sélection uniquement à partir de la date du jour (`new Date().toISOString().slice(0,10)`)
+— déterministe et volontaire pour la stabilité du menu par défaut, MAIS cela s'appliquait
+aussi quand l'utilisateur forçait une régénération (`forcerRegeneration=true`, bouton "🔄
+Nouvelles recettes"), qui retombait sur ce même chemin en l'absence d'IA configurée. Résultat :
+menu strictement identique à chaque pression du bouton le même jour. Corrigé dans
+`utils/cuisineCaller.js` : `getRecettesSecoursDuJour()` accepte maintenant un paramètre
+`variation` optionnel, renseigné avec `Date.now()` uniquement quand `forcerRegeneration` est
+vrai — la sélection change donc bien à chaque pression forcée, tout en restant stable pour le
+chargement normal (non forcé) du module.
+
+**Fichiers modifiés :**
+- `utils/plantAnalyzer.js` — `thinkingConfig: { thinkingBudget: 0 }` + maxOutputTokens 2048 (Gemini)
+- `utils/aiCaller.js` — même correctif préventif sur `appelGemini()` (chat Kira)
+- `utils/cuisineCaller.js` — `getRecettesSecoursDuJour(variation)` avec variation sur régénération forcée
+
+**Sujets ouverts, non traités ce lot :**
+- **Plantage Health Connect** (Kira OS se ferme entièrement en appuyant sur "Connecter Health
+  Connect") — en attente du fichier `crash.log` (procédure `adb logcat` donnée à David) pour
+  identifier la cause réelle avant de proposer un correctif ciblé. Hypothèse de travail :
+  possible incompatibilité entre `react-native-health-connect` et le récent passage à
+  `compileSdkVersion`/`targetSdkVersion` 36 (changement fait par David lui-même pendant son
+  débogage de build, hors de nos échanges directs).
+- Statut du build/APK actuellement installé par David à clarifier : erreurs de dépendances
+  rencontrées côté EAS, David a "simplement installé l'APK" obtenu — à confirmer si le build
+  a bien abouti en "Build successful" et si les lots 65/66 sont bien inclus dans ce qu'il teste.
+- OAuth Google Agenda (erreur 400) — toujours en attente côté David (Google Cloud Console).
+- Sphère 3D de Kira (lot 63) — toujours pas testée formellement.
+- Home Assistant — en attente du serveur.
+- Tuya/Smart Life — pas de nouveau retour de David sur la configuration du projet Tuya Cloud.
+
+**Repère important pour la suite :** le dépôt GitHub contient désormais plusieurs commits de
+dépannage de build (`expo-three`, `@expo/config-plugins`, `EAS_BUILD_NPM_CI_DISABLED`,
+`minSdkVersion`/`compileSdkVersion` 36...) qui n'ont pas été faits en session avec Claude —
+David a manifestement obtenu de l'aide ailleurs (ou en session Claude Code séparée) entre nos
+échanges. Toujours `git pull` avant de commencer un nouveau lot pour repartir de l'état réel
+du dépôt, pas seulement de ce qui est consigné ici.

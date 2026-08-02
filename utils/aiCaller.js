@@ -68,7 +68,11 @@ async function appelGemini(message, appState, apiKey, modele = 'gemini-2.5-flash
     body: JSON.stringify({
       system_instruction: { parts: [{ text: systemPrompt }] },
       contents,
-      generationConfig: { temperature: 0.8, maxOutputTokens: 2000 },
+      // BUGFIX (01/08) : les modeles Gemini 2.5 font par defaut un raisonnement
+      // interne ("thinking") qui grignote maxOutputTokens avant de produire le
+      // texte visible, risquant de tronquer les reponses de Kira sur les demandes
+      // un peu longues. Desactive : pas utile pour des reponses courtes et directes.
+      generationConfig: { temperature: 0.8, maxOutputTokens: 2000, thinkingConfig: { thinkingBudget: 0 } },
     }),
   });
 

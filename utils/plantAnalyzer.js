@@ -70,12 +70,15 @@ async function analyserAvecGemini(imageBase64, apiKey, modele = 'gemini-2.5-flas
           ],
         },
       ],
-      // CORRECTIF LOT 60 : 500 tokens était trop bas pour le JSON complet
-      // demandé (tous les champs + observations + 2 conseils secondaires) —
-      // Gemini était coupé en plein milieu de sa réponse, ce qui cassait le
-      // JSON ("JSON Parse error: Unexpected end of input"). 1024 laisse une
-      // marge confortable même pour des observations un peu longues.
-      generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+      // BUGFIX (01/08) : "réponse coupée juste avant que Gemini ait pu répondre".
+      // Les modèles Gemini 2.5 (dont gemini-2.5-flash, notre modèle par défaut)
+      // font par défaut un raisonnement interne ("thinking") qui consomme une
+      // partie du quota maxOutputTokens AVANT même de produire le texte visible
+      // — avec un budget serré, la réflexion pouvait à elle seule épuiser les
+      // 1024 tokens (lot 60), coupant la réponse avant la moindre lettre de
+      // JSON. On désactive ce raisonnement (inutile ici, on veut juste un JSON
+      // structuré) et on remonte la marge à 2048 par sécurité.
+      generationConfig: { temperature: 0.4, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } },
     }),
   });
 

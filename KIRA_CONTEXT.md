@@ -920,3 +920,72 @@ projet natif Android garanti à jour — pertinent aussi pour le plantage Health
 - OAuth Google Agenda (erreur 400) — en attente côté David.
 - Home Assistant — en attente du serveur.
 - Tuya/Smart Life — pas de nouveau retour sur la configuration Tuya Cloud.
+
+### [02/08/2026] — Lot 69 : cause réelle du plantage Health Connect identifiée et corrigée (nécessite rebuild)
+
+David a fourni un `crash.log` complet (`adb logcat`) après reproduction du bug ("Connecter
+Health Connect" → fermeture immédiate de Kira OS). Exception trouvée directement dans le log :
+
+```
+kotlin.UninitializedPropertyAccessException: lateinit property requestPermission
+    has not been initialized
+    at dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate
+       .launchPermissionsDialog(HealthConnectPermissionDelegate.kt:45)
+    at dev.matinzd.healthconnect.HealthConnectManager$requestPermission$1$1.invokeSuspend(...)
+```
+
+**Cause confirmée en inspectant le code source du paquet** (`npm pack
+react-native-health-connect@3.5.3` + lecture de `HealthConnectPermissionDelegate.kt` et du
+`README.md` du paquet) : la librairie exige un appel explicite à
+`HealthConnectPermissionDelegate.setPermissionDelegate(this)` dans `onCreate()` de
+`MainActivity.kt`, pour enregistrer le "launcher" Android (`registerForActivityResult`) qui
+gère la boîte de dialogue système de permissions. Sans cet appel, la propriété `lateinit
+requestPermission` n'est jamais initialisée → plantage natif immédiat au premier appel de
+`requestPermission()`, avant même d'atteindre le code JS (aucun `try/catch` JS ne peut
+l'intercepter). Cette étape est **documentée officiellement** (README du paquet, section
+"Installation" + "Expo installation" via le paquet `expo-health-connect`) mais n'avait jamais
+été appliquée dans ce projet — le lot 60 avait corrigé une pièce différente et nécessaire
+(le bloc `<queries>` du manifeste), mais pas celle-ci.
+
+**Correctif choisi :** plutôt que d'ajouter la dépendance npm officielle `expo-health-connect`
+(risque de nouveaux conflits de résolution, sujet déjà pénible sur ce projet), écriture d'un
+plugin Expo local, `plugins/withHealthConnectPermissionDelegate.js`, sur le même principe que
+`withHealthConnectManifest.js` (lot 45/60) et `withPorcupineAssets.js` : utilise
+`withMainActivity` de `@expo/config-plugins` pour patcher automatiquement `MainActivity.kt` à
+chaque `prebuild`, en ajoutant les imports nécessaires et l'appel
+`HealthConnectPermissionDelegate.setPermissionDelegate(this)` **juste après**
+`super.onCreate(...)` (ordre exact recommandé par la doc officielle — un appel avant
+`super.onCreate()` n'est pas garanti sûr côté cycle de vie Android). Logique testée avant
+livraison sur un exemple réaliste de `MainActivity.kt` tel que généré par Expo SDK 56 (script
+de test ad hoc, pas de suite de tests formelle dans le repo) : patch appliqué au bon endroit,
+idempotent (vérifié : aucune duplication si le plugin tourne plusieurs fois via des
+`prebuild` répétés).
+
+**⚠️ Ce lot modifie `app.json` (nouvelle entrée dans `plugins`) et ajoute un fichier qui
+patche du code natif — contrairement aux lots précédents, `eas update` NE SUFFIT PAS. Un
+`npx expo prebuild --clean` puis un vrai build (local ou EAS) sont nécessaires.**
+
+**Fichiers modifiés :**
+- `plugins/withHealthConnectPermissionDelegate.js` (nouveau)
+- `app.json` — ajout de `"./plugins/withHealthConnectPermissionDelegate.js"` dans `plugins`
+
+**Autre changement ce lot (hors code) :** David a demandé un guide de référence permanent
+(commandes git, méthodes de build détaillées incluant sans EAS, script de test de prompts IA
+autonome) pour pouvoir avancer seul en cas de quota Claude dépassé. Livré :
+`GUIDE_COMMANDES.md` (racine du dépôt, pas dans un dossier de code) et `test-prompt.js`
+(script Node autonome pour tester des prompts Gemini directement). **Consigne pour la suite :**
+inclure désormais un rappel condensé des commandes pertinentes (sauvegarde + méthode de build
+adaptée au type de changement) dans le lisez-moi de chaque futur lot, avec renvoi vers
+`GUIDE_COMMANDES.md` pour le détail complet — ne pas tout dupliquer intégralement à chaque
+fois.
+
+**Sujets ouverts, non traités ce lot :**
+- Confirmation de David toujours en attente sur l'origine exacte de son APK actuel (build EAS
+  réussi vs. local) — moins critique maintenant qu'on sait qu'un `prebuild --clean` est de
+  toute façon nécessaire pour ce lot.
+- Rendu 3D (lot 63/68) : à re-tester par David une fois ce rebuild fait, pour voir si
+  `expo-three` est bien compilé (cf. historique Git des commits retrait/restauration
+  d'`expo-three`, lot 68).
+- OAuth Google Agenda (erreur 400) — en attente côté David.
+- Home Assistant — en attente du serveur.
+- Tuya/Smart Life — pas de nouveau retour sur la configuration Tuya Cloud.

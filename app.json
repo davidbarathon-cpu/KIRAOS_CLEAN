@@ -57,6 +57,7 @@
       "expo-quick-actions",
       "expo-secure-store",
       "./plugins/withHealthConnectManifest.js",
+      "./plugins/withHealthConnectPermissionDelegate.js",
       [
         "expo-build-properties",
         {

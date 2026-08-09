@@ -47,6 +47,7 @@ const TOUS_MODULES = [
   { id: 'traduction', icon: '🌍', label: 'Traduction',      desc: 'Traducteur',          color: PALETTE.teal,    screen: 'Traduction' },
   { id: 'reveil',     icon: '⏰', label: 'Réveil',          desc: 'Mes alarmes',         color: PALETTE.yellow,  screen: 'Reveil' },
   { id: 'domotique',  icon: '🏠', label: 'Domotique',       desc: 'Maison connectée',    color: '#64748B',       screen: 'Domotique' },
+  { id: 'humeur',     icon: '😊', label: 'Humeur',          desc: 'Ton ressenti du jour', color: '#EC4899',      screen: 'Humeur' },
 ];
 
 export default function HomeScreen({ navigation }) {

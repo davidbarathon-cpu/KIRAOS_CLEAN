@@ -989,3 +989,52 @@ fois.
 - OAuth Google Agenda (erreur 400) — en attente côté David.
 - Home Assistant — en attente du serveur.
 - Tuya/Smart Life — pas de nouveau retour sur la configuration Tuya Cloud.
+
+### [02/08/2026] — Lot 70 : nouveau module Humeur (suivi quotidien du ressenti)
+
+David a demandé une idée de son cru ("je ne sais pas, une idée ?") pour avancer pendant qu'il
+gère le rebuild du lot 69. Proposition retenue et validée implicitement (pas d'objection) :
+porter le module Humeur (`ModHumeur`) déjà maquetté dans le tout premier prototype web
+(`KiraApp.jsx`, fourni en tout début de projet) mais jamais implémenté dans la vraie app React
+Native. **100% JavaScript, `eas update`, aucun rebuild.**
+
+**Fonctionnement :**
+- Nouvel écran `screens/HumeurScreen.js` — 5 humeurs sélectionnables (😄😊😐😔😢, avec
+  label/couleur/score), une note optionnelle par jour, historique des 7 derniers jours en
+  petits cercles colorés, message de synthèse hebdomadaire par Kira (ton volontairement léger
+  et non clinique — pas de vocabulaire diagnostique, juste un encouragement bienveillant
+  cohérent avec le reste de l'app).
+- Stockage : nouvelle clé `humeur_historique` (tableau d'entrées `{date, emoji, label, score,
+  note}`, une entrée par date ISO `YYYY-MM-DD`, conservées sur 60 jours glissants). Pas de
+  données d'exemple pré-remplies au premier lancement (contrairement à Courses/Notes) — pour
+  éviter par construction la classe de bug corrigée au lot 65 (liste vidée par l'utilisateur
+  confondue avec absence de données) : le tableau part simplement vide et le reste tant que
+  l'utilisateur n'a rien sélectionné.
+- Rattaché au système de navigation (`App.js`, route `"Humeur"`) et à la grille de modules de
+  l'accueil (`screens/HomeScreen.js`, `TOUS_MODULES`) ainsi qu'à la liste des modules
+  activables dans Paramètres (`screens/ParametresScreen.js`, `TOUS_MODULES` — liste séparée et
+  redondante avec celle de HomeScreen.js, pattern déjà existant avant ce lot, pas retouché).
+
+**Point d'attention documenté pour David :** comme `modules_actifs` est déjà personnalisé et
+stocké pour lui, le nouveau module n'apparaît PAS automatiquement sur son accueil tant qu'il
+ne l'active pas manuellement dans Paramètres → 🧩 Modules — comportement normal du système
+existant, pas un bug, mais à signaler à chaque nouveau module ajouté à l'avenir.
+
+**Piste non traitée ce lot, à envisager plus tard si David valide l'usage du module :**
+alimenter le contexte système de Kira (`aiCaller.js`/`kiraBrain.js`) avec l'humeur récente
+pour que le chat en tienne compte dans ses réponses ("Kira devra... connaître mon humeur" du
+cahier des charges initial) — actuellement seul l'horoscope alimente cette dimension. Pas fait
+ce lot pour rester sur un scope réduit et sûr (nouveau module isolé, aucun risque de casser
+l'existant).
+
+**Fichiers modifiés/créés :**
+- `screens/HumeurScreen.js` (nouveau)
+- `App.js` — import + route `"Humeur"`
+- `screens/HomeScreen.js` — entrée dans `TOUS_MODULES`
+- `screens/ParametresScreen.js` — entrée dans `TOUS_MODULES` (liste des modules activables)
+
+**Sujets ouverts, inchangés depuis le lot 69 :**
+- Lot 69 (plantage Health Connect) : David gère actuellement le rebuild, pas encore de retour
+  sur le résultat.
+- Rendu 3D (lot 63/68) : à re-tester après ce même rebuild.
+- OAuth Google Agenda (erreur 400), Home Assistant, Tuya/Smart Life : en attente côté David.

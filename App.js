@@ -12,6 +12,7 @@ import CoursesScreen from './screens/CoursesScreen';
 import CreerModuleScreen from './screens/CreerModuleScreen';
 import CuisineScreen from './screens/CuisineScreen';
 import DomotiqueScreen from './screens/DomotiqueScreen';
+import HumeurScreen from './screens/HumeurScreen';
 import EcouteRapideScreen from './screens/EcouteRapideScreen';
 import GuitareScreen from './screens/GuitareScreen';
 import HomeScreen from './screens/HomeScreen';
@@ -144,6 +145,7 @@ export default function App() {
           <Stack.Screen name="Traduction" component={TraductionScreen} />
           <Stack.Screen name="Reveil" component={ReveilScreen} />
           <Stack.Screen name="Domotique" component={DomotiqueScreen} />
+          <Stack.Screen name="Humeur" component={HumeurScreen} />
           <Stack.Screen name="Parametres" component={ParametresScreen} />
           <Stack.Screen name="ModulePersonnalise" component={ModulePersonnaliseScreen} />
           <Stack.Screen name="CreerModule" component={CreerModuleScreen} />

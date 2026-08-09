@@ -86,6 +86,9 @@ const TOUS_MODULES = [
   { id: 'reveil', icon: '⏰', label: 'Réveil' },
   { id: 'domotique', icon: '🏠', label: 'Domotique' },
   { id: 'humeur', icon: '😊', label: 'Humeur' },
+  { id: 'minuteur', icon: '⏱️', label: 'Minuteur' },
+  { id: 'meditation', icon: '🧘', label: 'Méditation' },
+  { id: 'objectifs', icon: '🎯', label: 'Objectifs' },
 ];
 
 const COULEURS_ACCENT = [PALETTE.purple, PALETTE.teal, PALETTE.pink, PALETTE.orange, PALETTE.blue, PALETTE.violet, PALETTE.magenta, PALETTE.green, PALETTE.yellow, PALETTE.cyan];

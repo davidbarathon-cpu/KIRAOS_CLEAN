@@ -48,6 +48,9 @@ const TOUS_MODULES = [
   { id: 'reveil',     icon: '⏰', label: 'Réveil',          desc: 'Mes alarmes',         color: PALETTE.yellow,  screen: 'Reveil' },
   { id: 'domotique',  icon: '🏠', label: 'Domotique',       desc: 'Maison connectée',    color: '#64748B',       screen: 'Domotique' },
   { id: 'humeur',     icon: '😊', label: 'Humeur',          desc: 'Ton ressenti du jour', color: '#EC4899',      screen: 'Humeur' },
+  { id: 'minuteur',   icon: '⏱️', label: 'Minuteur',        desc: 'Pomodoro & focus',    color: PALETTE.pink,   screen: 'Minuteur' },
+  { id: 'meditation', icon: '🧘', label: 'Méditation',      desc: 'Séances guidées',     color: PALETTE.violet, screen: 'Meditation' },
+  { id: 'objectifs',  icon: '🎯', label: 'Objectifs',       desc: 'Suivi & progression', color: PALETTE.blue,   screen: 'Objectifs' },
 ];
 
 export default function HomeScreen({ navigation }) {

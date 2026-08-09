@@ -1038,3 +1038,51 @@ l'existant).
   sur le résultat.
 - Rendu 3D (lot 63/68) : à re-tester après ce même rebuild.
 - OAuth Google Agenda (erreur 400), Home Assistant, Tuya/Smart Life : en attente côté David.
+
+### [06/08/2026] — Lot 71 : 3 nouveaux modules (Minuteur/Pomodoro, Méditation, Objectifs)
+
+David a demandé une suite au lot 70 pendant qu'il attend 2 jours avant de pouvoir tester
+l'installation des lots en attente (69, 70, 71). Proposé 3 idées de modules issus du
+prototype web jamais portés (`ModTimer`, `ModMeditation`, et l'onglet "objectifs" du module
+Santé) — David a répondu "on peux faire les 3". **100% JavaScript, `eas update`, aucun
+rebuild.**
+
+**⏱️ Minuteur (`screens/MinuteurScreen.js` + `utils/minuteurHistorique.js`, nouveaux) :**
+3 modes (Pomodoro 25min / Courte pause 5min / Longue pause 15min), anneau de progression
+(réutilise `ProgressRing` de `components/Shared.js`), stats du jour/semaine calculées à la
+volée sur un historique de sessions horodatées (même pattern que
+`utils/guitareProgression.js`, lot 13). Notification programmée au démarrage via
+`programmerNotificationDansSecondes` (déjà existant, `utils/notifications.js`) pour prévenir
+même app en arrière-plan, annulée via `annulerNotifications` si pause/reset avant la fin —
+même logique de confirmation/annulation que Géo-Kira (lot 66).
+
+**🧘 Méditation (`screens/MeditationScreen.js`, nouveau) :** 5 séances guidées PAR TEXTE
+(pas d'audio — noté comme limite assumée, piste future), même mécanique de minuteur +
+notification que le module Minuteur. Suivi cumulé (minutes totales, nombre de séances) sur
+une clé de stockage dédiée (`meditation_historique`).
+
+**🎯 Objectifs (`screens/ObjectifsScreen.js`, nouveau) :** contrairement au prototype
+d'origine (liste de démonstration figée, onglet du module Santé), transformé en module
+autonome et réellement éditable — l'utilisateur crée ses objectifs (titre + catégorie),
+ajuste la progression par paliers de 10%, objectifs séparés "en cours" / "terminés" une fois
+à 100%.
+
+**Intégration navigation/accueil (comme au lot 70) :**
+- `App.js` — imports + 3 nouvelles routes (`Minuteur`, `Meditation`, `Objectifs`)
+- `screens/HomeScreen.js` — 3 entrées dans `TOUS_MODULES` (couleurs PALETTE.pink/violet/blue)
+- `screens/ParametresScreen.js` — 3 entrées dans la liste des modules activables
+
+**Rappel du point d'attention déjà documenté au lot 70 :** ces 3 modules, comme Humeur,
+n'apparaissent pas automatiquement sur l'accueil de David tant qu'il ne les active pas
+manuellement dans Paramètres → 🧩 Modules (sa liste `modules_actifs` est déjà personnalisée
+et stockée).
+
+**Pistes non traitées ce lot :** guide audio/voix pour la Méditation (actuellement texte
+seul) ; lier les nouveaux modules au contexte de Kira dans le chat (comme évoqué pour Humeur
+au lot 70) — toujours pas fait, à envisager une fois l'usage validé par David plutôt que
+d'anticiper sans retour d'usage réel.
+
+**Sujets ouverts, inchangés :**
+- David teste tout (lots 69/70/71) dans ~2 jours — pas de retour avant.
+- OAuth Google Agenda, Home Assistant, Tuya/Smart Life : en attente côté David, sans
+  changement depuis le lot 69.

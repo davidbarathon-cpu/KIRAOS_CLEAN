@@ -870,3 +870,53 @@ dépannage de build (`expo-three`, `@expo/config-plugins`, `EAS_BUILD_NPM_CI_DIS
 David a manifestement obtenu de l'aide ailleurs (ou en session Claude Code séparée) entre nos
 échanges. Toujours `git pull` avant de commencer un nouveau lot pour repartir de l'état réel
 du dépôt, pas seulement de ce qui est consigné ici.
+
+### [01/08/2026] — Lot 68 : toggle "Rendu 3D" sans effet visible (bug de réactivité JS pur)
+
+David a signalé que le bouton "🔮 Rendu 3D" (Paramètres → 🌟 Kira, lot 63) n'avait aucun
+effet visible. Il a aussi précisé, sur les sujets précédents (lot 67) : le dernier APK
+installé inclut bien les lots 65/66 (Géo-Kira, dictons), mais il n'a pas réussi à faire
+aboutir le build EAS en ligne et a récupéré l'APK "dans le dossier de Kira" — origine exacte
+(build EAS finalement réussi malgré des erreurs affichées, ou build local via
+`expo run:android`/`gradlew`) non confirmée, question reposée. **Toujours du pur JavaScript
+pour ce lot, `eas update`.**
+
+**Cause du bug identifiée :** `components/KiraIcon.js` relit le réglage `rendu3DActif`
+uniquement dans un `useEffect` déclenché au montage du composant. Le bouton flottant Kira
+(`KiraFAB`) restant monté en permanence sur la plupart des écrans (React Navigation garde
+les écrans précédents en mémoire dans la pile), revenir de Paramètres vers l'accueil après
+avoir activé le toggle ne provoque PAS de remontage du FAB déjà affiché — celui-ci garde donc
+la valeur lue à son tout premier montage, indéfiniment, jusqu'à fermeture complète de l'app.
+
+**Correctif :** ajout d'un mécanisme de notification via `DeviceEventEmitter` (natif à React
+Native, pas de nouvelle dépendance) :
+- `utils/apiKeys.js` — `setRendu3DActif()` émet désormais `DeviceEventEmitter.emit('kira:rendu3d-changed', actif)` après la sauvegarde.
+- `components/KiraIcon.js` — s'abonne à cet événement (`DeviceEventEmitter.addListener`) en plus du chargement initial, avec nettoyage à la désinscription (`sub.remove()`). Toute icône Kira déjà montée à l'écran se met donc à jour immédiatement, sans navigation ni redémarrage.
+
+**Non résolu par ce lot, clairement expliqué à David dans le lisez-moi :** ce correctif ne
+garantit PAS que le rendu 3D natif (`expo-three`/`expo-gl`) s'affichera correctement une fois
+le toggle réactif — seulement que le toggle produira maintenant un effet visible (bascule
+réelle vers `KiraOrb3D`, qui peut échouer/rester invisible si le module natif n'est pas
+proprement compilé dans l'APK testé). Repère trouvé dans l'historique Git : `expo-three` a
+été retiré puis remis pendant les sessions de débogage de build de David (commits `70e9a81
+fix: remove expo-three completely to unblock EAS build` puis `69a6a19 fix: restore
+expo-three cleanly for 3d component`) — plausible que l'APK actuellement testé date d'un
+moment où le module n'était pas correctement inclus. `npx expo prebuild --clean` recommandé
+avant le prochain build, quelle qu'en soit la méthode (EAS ou local), pour repartir d'un
+projet natif Android garanti à jour — pertinent aussi pour le plantage Health Connect
+(hypothèse : dossier `android/` local périmé, n'ayant jamais réappliqué le plugin
+`withHealthConnectManifest.js` du lot 60 ni la config `expo-build-properties` SDK 36).
+
+**Fichiers modifiés :**
+- `utils/apiKeys.js` — `DeviceEventEmitter` importé, `setRendu3DActif()` émet l'événement
+- `components/KiraIcon.js` — `DeviceEventEmitter` importé, abonnement à l'événement dans le useEffect existant
+
+**Sujets ouverts, non traités ce lot :**
+- **Plantage Health Connect** — toujours en attente du `crash.log` (3ᵉ demande). Sans ce log,
+  impossible de trancher entre "dossier android/ périmé" et "incompatibilité SDK 36" (ou
+  toute autre cause).
+- Confirmation demandée à David sur l'origine exacte de son APK actuel (build EAS réussi vs.
+  build local avec dossier natif potentiellement périmé).
+- OAuth Google Agenda (erreur 400) — en attente côté David.
+- Home Assistant — en attente du serveur.
+- Tuya/Smart Life — pas de nouveau retour sur la configuration Tuya Cloud.

@@ -5,6 +5,7 @@
 //  fournisseur choisi, directement depuis le téléphone.
 // ═══════════════════════════════════════════
 
+import { DeviceEventEmitter } from 'react-native';
 import { getData, setData } from './storage';
 
 // ── Définition des fournisseurs d'IA disponibles ──
@@ -189,9 +190,21 @@ export async function getRendu3DActif() {
   return prefs?.rendu3DActif === true;
 }
 
+/**
+ * BUGFIX (01/08) : "le bouton pour le rendu 3D n'a aucun effet". Cause :
+ * KiraIcon.js ne relisait ce réglage qu'UNE FOIS, à son montage. Or le
+ * bouton flottant Kira (KiraFAB) reste monté en permanence sur la plupart
+ * des écrans (React Navigation garde les écrans précédents en mémoire) —
+ * en revenant de Paramètres vers l'accueil après avoir activé le rendu 3D,
+ * le FAB déjà affiché ne se remontait jamais et gardait donc l'ancienne
+ * valeur, donnant l'impression que le bouton ne faisait rien. On émet
+ * maintenant un événement local à chaque changement : toute icône Kira
+ * déjà affichée à l'écran se met à jour instantanément (voir KiraIcon.js).
+ */
 export async function setRendu3DActif(actif) {
   const prefs = (await getData('prefs')) || {};
   await setData('prefs', { ...prefs, rendu3DActif: actif });
+  DeviceEventEmitter.emit('kira:rendu3d-changed', actif);
 }
 
 /**

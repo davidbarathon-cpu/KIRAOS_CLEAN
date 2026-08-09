@@ -16,7 +16,7 @@
 // Toutes ces animations sont désactivées en Mode Éco (lot 50), comme avant.
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, DeviceEventEmitter, StyleSheet, Text, View } from 'react-native';
 import Svg, {
   Circle, Defs, Ellipse, LinearGradient,
   RadialGradient, Stop,
@@ -49,9 +49,18 @@ export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoil
   useEffect(() => {
     if (modeEco || apercu) {
       setRendu3D(false);
-      return;
+      return undefined;
     }
     getRendu3DActif().then(setRendu3D);
+
+    // BUGFIX (01/08) : sans cet abonnement, une icône déjà montée (ex : le
+    // bouton flottant, présent sur presque tous les écrans) ne relisait ce
+    // réglage qu'à son propre montage — activer le rendu 3D dans Paramètres
+    // puis revenir en arrière n'avait donc aucun effet visible tant que le
+    // composant n'était pas complètement remonté. Voir setRendu3DActif()
+    // dans utils/apiKeys.js, qui émet cet événement à chaque changement.
+    const sub = DeviceEventEmitter.addListener('kira:rendu3d-changed', valeur => setRendu3D(valeur));
+    return () => sub.remove();
   }, [modeEco, apercu]);
 
   // Animations existantes (lot 40)

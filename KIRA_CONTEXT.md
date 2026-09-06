@@ -1245,3 +1245,45 @@ existants : `screens/HomeScreen.js` (bouton briefing de l'accueil) et
 **Sujets ouverts, inchangés :**
 - Lots 72, 73 et 74 tous en attente d'installation par David (plusieurs jours annoncés).
 - OAuth Google Agenda, Home Assistant, Tuya/Smart Life : sans changement.
+
+### [15/08/2026] — Lot 75 : modules suggérés selon le moment de la journée
+
+David a redemandé de nouvelles idées. En reparcourant le tout premier cahier des charges
+(fourni en toute première session), une demande explicite jamais implémentée a été repérée :
+*"j'aimerais que les modules changent en fonction de la journée et du planning, actualités le
+matin, le potager le soir... Kira devra pouvoir gérer ça."* Confirmé par grep qu'aucune
+logique horaire n'existait dans `screens/HomeScreen.js` avant ce lot. **100% JavaScript,
+`eas update`, aucun rebuild.**
+
+**Choix de conception :** masquer des modules selon l'heure aurait été fidèle à la lettre de
+la demande mais risqué en usage réel (confusion "où est passé mon module ?", surtout pour un
+utilisateur qui vient de lots précédents où plus rien ne disparaît jamais sans action
+explicite — cf. tout le travail du lot 65 sur les listes vidées à tort). Choix retenu :
+**réorganisation, jamais de masquage** — les modules pertinents pour le moment présent
+remontent dans une section "🌟 Suggérés maintenant" en haut de l'accueil, le reste des modules
+actifs de l'utilisateur reste affiché normalement juste en dessous sous "Tous les modules".
+Chaque module actif apparaît exactement une fois (pas de duplication entre les deux sections).
+
+**Implémentation :**
+- `utils/modulesDynamiques.js` (nouveau) — `PERIODES` : 6 tranches horaires avec une liste
+  ordonnée d'ids de modules pertinents chacune (matin : actualités/météo/agenda/humeur/cuisine ;
+  midi : cuisine/courses/agenda ; après-midi : guitare/objectifs/minuteur/traduction/notes ;
+  soir : potager/cuisine/domotique/musique/budget ; nuit : réveil/méditation/humeur/notes).
+  Deux fonctions pures et testables : `getIdsSuggeresPourHeure(heure)` et
+  `separerModulesSuggeres(modules, heure)` — cette dernière retourne `{suggeres, autres}` à
+  partir de la liste déjà filtrée selon les modules activés par l'utilisateur, limité à 4
+  suggestions maximum pour ne pas dominer l'écran. Testé avant livraison (script ad hoc) sur
+  plusieurs heures et vérifié qu'aucun module n'est perdu ni dupliqué (suggeres.length +
+  autres.length === total).
+- `screens/HomeScreen.js` — import + appel de `separerModulesSuggeres()` sur
+  `tousLesModulesAffiches` (liste déjà existante, inclut modules standards + personnalisés),
+  nouvelle section JSX conditionnelle "🌟 Suggérés maintenant" avant la grille "Tous les
+  modules" habituelle (renommée dynamiquement selon la présence ou non de suggestions).
+
+**Fichiers modifiés/créés :**
+- `utils/modulesDynamiques.js` (nouveau)
+- `screens/HomeScreen.js` (contient aussi les changements des lots 73 et 74)
+
+**Sujets ouverts, inchangés :**
+- Lots 72, 73, 74 et 75 tous en attente d'installation par David.
+- OAuth Google Agenda, Home Assistant, Tuya/Smart Life : sans changement.

@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 
 import { Chip, KiraFAB, ModuleCard, ProgressRing, SectionLabel } from '../components/Shared';
+import { separerModulesSuggeres } from '../utils/modulesDynamiques'; // LOT 75
 import { analyzeContext, generatePredictions } from '../utils/kiraBrain';
 import { getData } from '../utils/storage';
 import { getSanteDuJour } from '../utils/santeManager';
@@ -170,6 +171,10 @@ export default function HomeScreen({ navigation }) {
   // ajouterait une case de complexité inutile pour un module qu'il a lui-même créé).
   const modulesPersonnalisesAffiches = modulesPersonnalises.map(versEntreeModuleAccueil);
   const tousLesModulesAffiches = [...modulesAffiches, ...modulesPersonnalisesAffiches];
+  // LOT 75 — modules qui remontent selon le moment de la journée (demande
+  // du tout premier cahier des charges). "heure" (déjà calculée plus haut
+  // pour l'horloge) est au format "HH:MM" — on en extrait juste les heures.
+  const { suggeres: modulesSuggeres, autres: modulesRestants } = separerModulesSuggeres(tousLesModulesAffiches, parseInt(heure, 10));
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
@@ -276,10 +281,24 @@ export default function HomeScreen({ navigation }) {
             )}
           </View>
 
+          {/* LOT 75 — Modules suggérés selon le moment de la journée */}
+          {modulesSuggeres.length > 0 && (
+            <>
+              <SectionLabel style={{ marginTop: 18, marginBottom: 10 }}>🌟 Suggérés maintenant</SectionLabel>
+              <View style={styles.modulesGrid}>
+                {modulesSuggeres.map(m => (
+                  <ModuleCard key={m.id} icon={m.icon} label={m.label} desc={m.desc} color={m.color} theme={theme} onPress={() => navigation.navigate(m.screen, m.params)} />
+                ))}
+              </View>
+            </>
+          )}
+
           {/* Grille modules — filtrée selon les préférences + modules personnalisés */}
-          <SectionLabel style={{ marginTop: 18, marginBottom: 10 }}>Modules ({tousLesModulesAffiches.length})</SectionLabel>
+          <SectionLabel style={{ marginTop: 18, marginBottom: 10 }}>
+            {modulesSuggeres.length > 0 ? 'Tous les modules' : 'Modules'} ({tousLesModulesAffiches.length})
+          </SectionLabel>
           <View style={styles.modulesGrid}>
-            {tousLesModulesAffiches.map(m => (
+            {modulesRestants.map(m => (
               <ModuleCard key={m.id} icon={m.icon} label={m.label} desc={m.desc} color={m.color} theme={theme} onPress={() => navigation.navigate(m.screen, m.params)} />
             ))}
           </View>

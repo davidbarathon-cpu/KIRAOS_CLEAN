@@ -18,6 +18,47 @@
 import { getData } from './storage';
 import { getStatistiques as getStatistiquesMinuteur } from './minuteurHistorique';
 
+// LOT 74 — Même source de données que ci-dessus, mais sous forme structurée
+// (pas un paragraphe de prompt) pour alimenter le résumé matinal PARLÉ
+// (utils/kiraBriefing.js), qui a besoin de phrases courtes et naturelles à
+// l'oral plutôt que d'un bloc de texte destiné à un prompt IA.
+export async function getResumeActivitePourBriefing() {
+  const [humeurHistorique, objectifs, statsMinuteur, meditationHistorique] = await Promise.all([
+    getData('humeur_historique'),
+    getData('objectifs_liste'),
+    getStatistiquesMinuteur(),
+    getData('meditation_historique'),
+  ]);
+
+  let humeur = null;
+  if (Array.isArray(humeurHistorique) && humeurHistorique.length > 0) {
+    const derniere = humeurHistorique[humeurHistorique.length - 1];
+    const hier = new Date();
+    hier.setDate(hier.getDate() - 1);
+    // Ne mentionne l'humeur au briefing que si elle a été notée hier ou
+    // aujourd'hui — une humeur vieille de plusieurs jours n'a plus grand
+    // intérêt à être rappelée chaque matin.
+    const dateEntree = new Date(derniere.date);
+    const recente = dateEntree.toDateString() === new Date().toDateString() || dateEntree.toDateString() === hier.toDateString();
+    if (recente) humeur = { label: derniere.label, emoji: derniere.emoji, score: derniere.score };
+  }
+
+  const objectifsEnCours = Array.isArray(objectifs) ? objectifs.filter(o => o.progres < 100).length : 0;
+
+  let meditationFaiteAujourdhui = false;
+  if (Array.isArray(meditationHistorique)) {
+    const aujourdhui = new Date().toDateString();
+    meditationFaiteAujourdhui = meditationHistorique.some(s => new Date(s.date).toDateString() === aujourdhui);
+  }
+
+  return {
+    humeur,
+    objectifsEnCours,
+    pomodorosAujourdhui: statsMinuteur?.pomodorosAujourdhui || 0,
+    meditationFaiteAujourdhui,
+  };
+}
+
 export async function construireContexteActiviteRecente() {
   const [humeurHistorique, objectifs, statsMinuteur, meditationHistorique] = await Promise.all([
     getData('humeur_historique'),

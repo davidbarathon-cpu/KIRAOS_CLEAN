@@ -27,6 +27,7 @@ import { creerEvenementGoogle, supprimerEvenementGoogle } from '../utils/googleC
 import { analyzeContext } from '../utils/kiraBrain';
 import { detecterAjoutCourse, detecterAjoutNote, detecterCreationEvenement, detecterDemandeActualites, detecterDemandeBriefing, detecterDemandeTraduction, detecterMemorisation, detecterOubliMemoire, detecterSuppressionEvenement } from '../utils/kiraIntents';
 import { genererTexteBriefing } from '../utils/kiraBriefing';
+import { getResumeActivitePourBriefing } from '../utils/kiraActiviteRecente'; // LOT 74
 import { memoriserFait, oublierTout } from '../utils/kiraMemoire';
 import { getActualites } from '../utils/newsCaller';
 import { getData, setData } from '../utils/storage';
@@ -322,15 +323,19 @@ export default function KiraChatScreen({ navigation }) {
 
     // ── Briefing audio (lot 48) ──
     if (detecterDemandeBriefing(msg)) {
-      const meteoCache = (await getData('widget_meteo')) || { temp: null, icon: '⛅' };
+      const [meteoCache, activite] = await Promise.all([
+        getData('widget_meteo'),
+        getResumeActivitePourBriefing(), // LOT 74
+      ]);
       const texteBriefing = genererTexteBriefing({
         prenom: appState.profil?.prenom || appState.profil?.nom || '',
         heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
         kiraState: appState.kiraState,
-        meteo: meteoCache,
+        meteo: meteoCache || { temp: null, icon: '⛅' },
         agenda: appState.agenda,
         sante: appState.sante,
         dicton: null,
+        activite,
       });
       const withReply = [...withUser, { r: 'ai', t: texteBriefing }];
       // CORRECTIF LOT 64 : persistChat() ci-dessous lit déjà automatiquement

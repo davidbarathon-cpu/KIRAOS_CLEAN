@@ -30,6 +30,7 @@ import { getAllApiKeys } from '../utils/apiKeys';
 import { getMeteoReelle } from '../utils/weatherCaller';
 import { cacherMeteoPourWidget, refreshKiraWidget } from '../utils/widgetUpdater';
 import { genererTexteBriefing, lireBriefing } from '../utils/kiraBriefing';
+import { getResumeActivitePourBriefing } from '../utils/kiraActiviteRecente'; // LOT 74
 import { getDictonDuJour } from '../utils/dictons';
 
 const TOUS_MODULES = [
@@ -145,7 +146,7 @@ export default function HomeScreen({ navigation }) {
       setBriefingEnCours(false);
       return;
     }
-    const profil = await getData('profil');
+    const [profil, activite] = await Promise.all([getData('profil'), getResumeActivitePourBriefing()]);
     const texte = genererTexteBriefing({
       prenom: profil?.prenom || profil?.nom || '',
       heure,
@@ -154,6 +155,7 @@ export default function HomeScreen({ navigation }) {
       agenda,
       sante,
       dicton,
+      activite,
     });
     lireBriefing(texte, {
       onDebut: () => setBriefingEnCours(true),

@@ -61,3 +61,44 @@ export async function exporterDonneesJSON() {
 
   return { uri, nbCles: clesKira.length };
 }
+
+// LOT 74 — Rend enfin fonctionnel le bouton "📥 Importer une sauvegarde"
+// (jusqu'ici "Bientôt disponible" depuis le lot 58).
+//
+// Pas de sélecteur de fichier natif (expo-document-picker n'est pas
+// installé — volontairement, pour ne pas ajouter une dépendance native de
+// plus alors que David a déjà plusieurs rebuilds en attente). À la place :
+// l'utilisateur ouvre son fichier .json exporté (Drive, mail...), copie
+// son contenu, et le colle dans un champ texte de l'app. Un vrai
+// sélecteur de fichier pourra remplacer ça plus tard, une fois qu'un
+// rebuild natif sera de toute façon nécessaire pour autre chose.
+
+/**
+ * Restaure une sauvegarde à partir du texte JSON collé par l'utilisateur
+ * (généré par exporterDonneesJSON ci-dessus). Écrase les données
+ * actuelles pour chaque clé présente dans la sauvegarde — action
+ * destructive, à confirmer côté UI avant d'appeler cette fonction.
+ * Retourne { nbCles, dateExport }.
+ */
+export async function importerDonneesJSON(texteJSON) {
+  let parsed;
+  try {
+    parsed = JSON.parse(texteJSON);
+  } catch {
+    throw new Error("Le texte collé n'est pas un JSON valide — vérifie que tu as bien copié tout le contenu du fichier.");
+  }
+
+  if (!parsed || typeof parsed !== 'object' || !parsed.donnees || typeof parsed.donnees !== 'object') {
+    throw new Error("Ce contenu ne ressemble pas à une sauvegarde Kira OS valide (structure inattendue).");
+  }
+
+  const entrees = Object.entries(parsed.donnees).filter(([cle]) => cle.startsWith(PREFIX));
+  if (entrees.length === 0) {
+    throw new Error('Aucune donnée Kira OS reconnue dans ce fichier.');
+  }
+
+  const paires = entrees.map(([cle, valeur]) => [cle, typeof valeur === 'string' ? valeur : JSON.stringify(valeur)]);
+  await AsyncStorage.multiSet(paires);
+
+  return { nbCles: paires.length, dateExport: parsed.exporteLe || null };
+}

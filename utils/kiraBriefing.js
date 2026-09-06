@@ -18,10 +18,12 @@ import * as Speech from 'expo-speech';
  * et fiable, cohérent avec ce que l'utilisateur voit déjà à l'écran).
  *
  * data attendu : { prenom, heure, kiraState, meteo: {temp, icon},
- *   agenda: [...], sante: {...}, dicton: {t, a} }
+ *   agenda: [...], sante: {...}, dicton: {t, a}, activite: {...} }
+ *   (activite est optionnel — voir utils/kiraActiviteRecente.js,
+ *   getResumeActivitePourBriefing(), lot 74)
  */
 export function genererTexteBriefing(data) {
-  const { prenom, heure, kiraState, meteo, agenda = [], sante = {}, dicton } = data;
+  const { prenom, heure, kiraState, meteo, agenda = [], sante = {}, dicton, activite } = data;
   const nom = prenom || '';
   const phrases = [];
 
@@ -65,6 +67,19 @@ export function genererTexteBriefing(data) {
     : kiraState === 'recovery' ? 'calme — profites-en pour prendre soin de toi'
     : 'plutôt fluide et créative';
   phrases.push(`La journée s'annonce ${modeTexte}.`);
+
+  // ── Activité récente (Humeur / Objectifs / Minuteur / Méditation, lot 74) ──
+  // Volontairement discret et jamais interprétatif à l'oral : on rapporte
+  // des faits que l'utilisateur a lui-même déclarés (son propre choix
+  // d'humeur, ses propres objectifs), sans jamais poser de diagnostic ni
+  // d'affirmation sur son état — même consigne que pour le chat (voir
+  // utils/kiraActiviteRecente.js).
+  if (activite?.humeur) {
+    phrases.push(`Tu avais noté te sentir plutôt "${activite.humeur.label}" récemment.`);
+  }
+  if (activite?.objectifsEnCours > 0) {
+    phrases.push(`Tu as ${activite.objectifsEnCours} objectif${activite.objectifsEnCours > 1 ? 's' : ''} personnel${activite.objectifsEnCours > 1 ? 's' : ''} en cours.`);
+  }
 
   // ── Dicton ──
   if (dicton?.t) {

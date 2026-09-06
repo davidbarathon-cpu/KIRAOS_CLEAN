@@ -62,7 +62,7 @@ import {
   reprogrammerQuotidienne,
   verifierPermissionNotifications,
 } from '../utils/notifications';
-import { exporterDonneesJSON } from '../utils/dataBackup'; // LOT 58
+import { exporterDonneesJSON, importerDonneesJSON } from '../utils/dataBackup'; // LOT 58 / LOT 74
 import { getData, resetAllData, setData } from '../utils/storage';
 import { getTheme, PALETTE, THEMES } from '../utils/theme';
 
@@ -102,6 +102,9 @@ export default function ParametresScreen({ navigation }) {
   const [modulesPersonnalises, setModulesPersonnalises] = useState([]);
   const [saved, setSaved] = useState(false);
   const [exportEnCours, setExportEnCours] = useState(false); // LOT 58
+  const [showImport, setShowImport] = useState(false); // LOT 74
+  const [texteImport, setTexteImport] = useState('');
+  const [importEnCours, setImportEnCours] = useState(false);
   const [widgetMsg, setWidgetMsg] = useState(null);
   const [ecouteActive, setEcouteActive] = useState(false);
   const [ecouteChargement, setEcouteChargement] = useState(false);
@@ -312,6 +315,37 @@ export default function ParametresScreen({ navigation }) {
       Alert.alert('Erreur', `L'export a échoué : ${e.message}`);
     }
     setExportEnCours(false);
+  };
+
+  // LOT 74 — Rend fonctionnel le bouton d'import (jusqu'ici "bientôt disponible").
+  // Confirmation obligatoire avant d'écraser les données actuelles — action
+  // irréversible, comme la réinitialisation.
+  const lancerImportDonnees = () => {
+    if (!texteImport.trim()) return;
+    Alert.alert(
+      '⚠️ Restaurer cette sauvegarde ?',
+      'Toutes les données actuellement présentes dans les clés concernées seront REMPLACÉES par celles de la sauvegarde. Cette action est irréversible — exporte tes données actuelles avant si tu veux pouvoir revenir en arrière.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Restaurer', style: 'destructive', onPress: async () => {
+            setImportEnCours(true);
+            try {
+              const { nbCles, dateExport } = await importerDonneesJSON(texteImport);
+              setTexteImport('');
+              setShowImport(false);
+              Alert.alert(
+                '✅ Sauvegarde restaurée',
+                `${nbCles} clés de données restaurées${dateExport ? ` (exportées le ${new Date(dateExport).toLocaleDateString('fr-FR')})` : ''}. Ferme et rouvre l'application pour que tous les écrans affichent les données restaurées.`
+              );
+            } catch (e) {
+              Alert.alert('Erreur', e.message);
+            }
+            setImportEnCours(false);
+          },
+        },
+      ]
+    );
   };
 
   const confirmReset = () => {
@@ -1283,9 +1317,36 @@ export default function ParametresScreen({ navigation }) {
           <TouchableOpacity style={styles.dangerBtn} onPress={lancerExportDonnees} disabled={exportEnCours}>
             <Text style={styles.dangerBtnText}>{exportEnCours ? '⏳ Export en cours...' : '💾 Exporter mes données (JSON)'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.dangerBtn, { opacity: 0.5 }]} onPress={() => Alert.alert('Bientôt disponible', "L'import d'une sauvegarde n'est pas encore implémenté — seul l'export fonctionne pour l'instant (lot 58).")}>
-            <Text style={styles.dangerBtnText}>📥 Importer une sauvegarde (bientôt)</Text>
+          <TouchableOpacity style={styles.dangerBtn} onPress={() => setShowImport(!showImport)}>
+            <Text style={styles.dangerBtnText}>📥 Importer une sauvegarde</Text>
           </TouchableOpacity>
+          {showImport && (
+            <View style={styles.importBox}>
+              <Text style={styles.infoSmall}>
+                Ouvre ton fichier .json exporté (Drive, mail, Fichiers...), copie tout son
+                contenu, puis colle-le ci-dessous.
+              </Text>
+              <TextInput
+                style={styles.importInput}
+                placeholder='{"exporteLe": "...", "donnees": { ... }}'
+                placeholderTextColor="#555566"
+                value={texteImport}
+                onChangeText={setTexteImport}
+                multiline
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity
+                style={[styles.dangerBtn, { backgroundColor: 'rgba(255,101,132,0.12)', borderColor: 'rgba(255,101,132,0.3)', opacity: texteImport.trim() ? 1 : 0.5 }]}
+                onPress={lancerImportDonnees}
+                disabled={!texteImport.trim() || importEnCours}
+              >
+                <Text style={[styles.dangerBtnText, { color: PALETTE.pink }]}>
+                  {importEnCours ? '⏳ Restauration...' : '⚠️ Restaurer cette sauvegarde'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
           <TouchableOpacity style={[styles.dangerBtn, { backgroundColor: 'rgba(255,101,132,0.12)', borderColor: 'rgba(255,101,132,0.3)' }]} onPress={confirmReset}>
             <Text style={[styles.dangerBtnText, { color: PALETTE.pink }]}>⚠️ Réinitialiser l'application</Text>
           </TouchableOpacity>
@@ -1359,6 +1420,8 @@ const styles = StyleSheet.create({
   securityTitle: { fontSize: 13, fontWeight: '700', color: '#fff', marginBottom: 8 },
   securityText: { fontSize: 12, color: '#aaa', lineHeight: 19 },
   dangerBtn: { padding: 12, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', marginBottom: 8 },
+  importBox: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: 12, marginBottom: 8 },
+  importInput: { backgroundColor: 'rgba(0,0,0,0.3)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 9, color: '#fff', fontSize: 11, padding: 10, minHeight: 100, textAlignVertical: 'top', marginTop: 8, marginBottom: 10, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
   dangerBtnText: { color: '#ccc', fontSize: 12 },
   // ── Styles section API ──
   providerCard: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: 13, marginBottom: 12, borderWidth: 1 },

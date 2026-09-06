@@ -1191,3 +1191,57 @@ ce lot, pour repartir d'un dépôt local propre.
 - Lots 72 (Health Connect + sphère 3D) et 73 (celui-ci) en attente d'installation par David,
   qui a indiqué ne pas pouvoir tester avant plusieurs jours.
 - OAuth Google Agenda, Home Assistant, Tuya/Smart Life : sans changement.
+
+### [13/08/2026] — Lot 74 : import de sauvegarde fonctionnel + briefing matinal enrichi (Humeur/Objectifs)
+
+David a demandé une suite pendant qu'il attend de pouvoir installer les lots 72/73. Deux
+trous identifiés en inspectant le code existant (pas des idées inventées) : le bouton
+"Importer une sauvegarde" de `screens/ParametresScreen.js` était un stub depuis le lot 58
+("bientôt disponible"), et `utils/kiraBriefing.js` (résumé matinal) n'avait pas été mis à
+jour pour les modules Humeur/Objectifs/Minuteur/Méditation, alors que le chat venait de
+l'être au lot 73. **100% JavaScript, `eas update`, aucun rebuild.**
+
+**⚠️ Incident technique en cours de lot :** redémarrage de l'environnement de travail de
+Claude en plein milieu du chantier — tout le travail local non poussé (clone du dépôt, dossiers
+de préparation des lots 70 à 73) a été perdu. Récupéré intégralement en réextrayant les ZIP
+déjà livrés à David (`KiraOS_Lot72.zip`, `KiraOS_Lot73.zip`, toujours disponibles côté sortie)
+par-dessus un nouveau clone GitHub frais (qui reflétait l'état réel du dépôt : lot 71, David
+n'avait pas encore poussé les lots 72/73). Reconstruction réussie sans perte de contenu, mais
+la fonction d'import de `utils/dataBackup.js` (écrite juste avant l'incident) a dû être
+retapée. Levier de résilience noté pour la suite : les ZIP déjà présentés à l'utilisateur
+constituent une sauvegarde de fait du travail livré, à réextraire en priorité en cas
+d'incident similaire plutôt que de tout refaire de mémoire.
+
+**📥 Import de sauvegarde (`utils/dataBackup.js`, nouvelle fonction
+`importerDonneesJSON`) :** pas de sélecteur de fichier natif (`expo-document-picker` non
+installé, choix délibéré pour ne pas ajouter de dépendance native alors que les lots 72/73
+attendent déjà un rebuild) — l'utilisateur colle le contenu JSON exporté dans un champ texte.
+Validation de structure (`donnees` doit être un objet avec des clés préfixées `kiraos_`),
+écriture via `AsyncStorage.multiSet`. Câblé dans `screens/ParametresScreen.js` avec
+confirmation destructive obligatoire (`Alert.alert` style `destructive`) avant d'écraser quoi
+que ce soit, et rappel explicite à l'utilisateur de fermer/rouvrir l'app après restauration
+(beaucoup d'écrans mettent leurs données en cache mémoire au montage).
+
+**🌟 Briefing matinal enrichi :** nouvelle fonction `getResumeActivitePourBriefing()` dans
+`utils/kiraActiviteRecente.js` (complète, ne remplace pas, `construireContexteActiviteRecente()`
+du lot 73 — partage la même logique de lecture mais retourne des données structurées plutôt
+qu'un paragraphe formaté pour prompt IA, adapté à un discours parlé plus naturel).
+`utils/kiraBriefing.js` accepte un nouveau champ optionnel `data.activite` et mentionne
+l'humeur récente (uniquement si notée hier ou aujourd'hui — pas la peine de rappeler une
+humeur vieille de plusieurs jours) et le nombre d'objectifs en cours. Minuteur/Méditation
+volontairement exclus du briefing MATINAL (à cette heure-là, rien n'a encore pu être fait ce
+jour-là dans ces modules — aurait été absurde à l'oral). Câblé dans les deux points d'appel
+existants : `screens/HomeScreen.js` (bouton briefing de l'accueil) et
+`screens/KiraChatScreen.js` (commande vocale/texte "fais-moi un résumé", lot 48).
+
+**Fichiers modifiés :**
+- `utils/dataBackup.js` — `importerDonneesJSON()`
+- `screens/ParametresScreen.js` — UI d'import (contient aussi les changements du lot 73)
+- `utils/kiraActiviteRecente.js` — `getResumeActivitePourBriefing()`
+- `utils/kiraBriefing.js` — paramètre `activite`, nouvelles phrases
+- `screens/HomeScreen.js` — appel enrichi (contient aussi les changements du lot 73)
+- `screens/KiraChatScreen.js` — appel enrichi
+
+**Sujets ouverts, inchangés :**
+- Lots 72, 73 et 74 tous en attente d'installation par David (plusieurs jours annoncés).
+- OAuth Google Agenda, Home Assistant, Tuya/Smart Life : sans changement.

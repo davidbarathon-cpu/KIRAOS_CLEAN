@@ -15,6 +15,7 @@ const PACKAGE_HEALTH_CONNECT = 'com.google.android.apps.healthdata';
 
 const withHealthConnectManifest = config => {
   config = withQueriesHealthConnect(config);
+  config = withActivityAliasAndroid14(config);
   return withAndroidManifest(config, config => {
     const manifest = config.modResults.manifest;
     const activitePrincipale = manifest.application?.[0]?.activity?.[0];
@@ -71,6 +72,59 @@ const withQueriesHealthConnect = config => {
 
     if (!dejaPresent) {
       manifest.queries[0].package.push({ $: { 'android:name': PACKAGE_HEALTH_CONNECT } });
+    }
+
+    return config;
+  });
+};
+
+/**
+ * CORRECTIF LOT 72 : David a signalé "aucune permission accordée" et Kira
+ * absente de la liste des apps dans Health Connect. Cause confirmée en
+ * lisant la documentation officielle (matinzd.github.io/react-native-health-connect
+ * /docs/permissions) : depuis Android 14, Health Connect exige un
+ * <activity-alias> DÉDIÉ (en plus, pas à la place, du <intent-filter>
+ * ajouté au lot 60 qui ne couvre qu'Android 13 et avant) pour reconnaître
+ * l'app comme éligible aux permissions santé. Sans lui, l'app peut très
+ * bien appeler requestPermission() sans erreur JS, mais Health Connect
+ * refuse silencieusement d'accorder quoi que ce soit — exactement le
+ * symptôme observé. android:targetActivity pointe vers MainActivity par
+ * son nom court (".MainActivity"), résolu dynamiquement pour ne pas coder
+ * en dur le nom de package.
+ */
+const withActivityAliasAndroid14 = config => {
+  return withAndroidManifest(config, config => {
+    const manifest = config.modResults.manifest;
+    const application = manifest.application?.[0];
+
+    if (!application) {
+      console.warn('withHealthConnectManifest : <application> introuvable, activity-alias non ajouté.');
+      return config;
+    }
+
+    if (!application['activity-alias']) {
+      application['activity-alias'] = [];
+    }
+
+    const dejaPresent = application['activity-alias'].some(
+      a => a.$?.['android:name'] === 'ViewPermissionUsageActivity'
+    );
+
+    if (!dejaPresent) {
+      application['activity-alias'].push({
+        $: {
+          'android:name': 'ViewPermissionUsageActivity',
+          'android:exported': 'true',
+          'android:targetActivity': '.MainActivity',
+          'android:permission': 'android.permission.START_VIEW_PERMISSION_USAGE',
+        },
+        'intent-filter': [
+          {
+            action: [{ $: { 'android:name': 'android.intent.action.VIEW_PERMISSION_USAGE' } }],
+            category: [{ $: { 'android:name': 'android.intent.category.HEALTH_PERMISSIONS' } }],
+          },
+        ],
+      });
     }
 
     return config;

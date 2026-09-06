@@ -1086,3 +1086,64 @@ d'anticiper sans retour d'usage réel.
 - David teste tout (lots 69/70/71) dans ~2 jours — pas de retour avant.
 - OAuth Google Agenda, Home Assistant, Tuya/Smart Life : en attente côté David, sans
   changement depuis le lot 69.
+
+### [09/08/2026] — Lot 72 : Health Connect (activity-alias Android 14+) + sphère 3D invisible corrigés
+
+David a installé les lots en attente (69/70/71) et testé les deux points restés incertains :
+la sphère 3D (disparaît complètement à l'activation, au lieu du "aucun effet" corrigé au lot
+68) et Health Connect ("aucune permission accordée", Kira absente de la liste des apps dans
+Health Connect lui-même). **Nécessite un rebuild complet — changement de manifeste natif,
+comme le lot 69.**
+
+**Health Connect — cause confirmée par la documentation officielle** (fetch de
+`matinzd.github.io/react-native-health-connect/docs/permissions`) : constaté d'abord que les
+`<uses-permission>` santé (`android.permission.health.READ_STEPS` etc.) étaient DÉJÀ présents
+dans `app.json` (ajoutés par David pendant ses sessions de débogage antérieures, en dehors de
+nos échanges) — donc pas la cause. La vraie pièce manquante, clairement documentée : depuis
+**Android 14**, Health Connect exige un `<activity-alias name="ViewPermissionUsageActivity">`
+dédié dans le manifeste (avec son propre `<intent-filter>` sur
+`android.intent.action.VIEW_PERMISSION_USAGE` / catégorie
+`android.intent.category.HEALTH_PERMISSIONS`), EN PLUS (pas à la place) du `<intent-filter>`
+`androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE` déjà ajouté au lot 60 (qui ne couvre
+qu'Android 13 et avant). Le projet ciblant `compileSdkVersion`/`targetSdkVersion` 36, cette
+pièce Android 14+ était nécessaire et absente. Ajoutée dans
+`plugins/withHealthConnectManifest.js` (nouvelle fonction `withActivityAliasAndroid14`),
+logique testée avant livraison sur une structure de manifest JS réaliste (simulateur ad hoc,
+pas de suite de tests formelle) pour vérifier la production du bon XML et l'idempotence.
+
+**Sphère 3D — hypothèse retenue (non confirmée par un log natif, David n'en a pas fourni pour
+ce point précis)** : le fond transparent (`renderer.setClearColor(0x000000, 0)`) demandé au
+moteur de rendu peut, sur certains GPU/pilotes Android avec expo-gl, faire disparaître
+l'intégralité du contenu du calque plutôt que seulement l'arrière-plan — hypothèse déjà
+anticipée dans les commentaires du lot 63 ("carré sombre" attendu, mais pas disparition
+totale). Corrigé dans `components/KiraOrb3D.js` : fond opaque assorti au thème sombre par
+défaut (`#07070e`, passé en prop `backgroundColor`) au lieu d'une tentative de transparence.
+**Filet de sécurité ajouté indépendamment de la cause exacte** : toute la création de
+scène/boucle de rendu est protégée par `try/catch`, avec un callback `onErreur` remonté à
+`components/KiraIcon.js` qui bascule automatiquement sur l'icône 2D (`erreur3D` state) si le
+rendu 3D échoue pour quelque raison que ce soit — garantit qu'il n'y aura plus jamais d'icône
+totalement invisible, même si la cause exacte s'avère différente de l'hypothèse retenue.
+`erreur3D` se réinitialise à chaque nouveau changement du réglage (écouteur
+`kira:rendu3d-changed`, lot 68) pour permettre un nouvel essai sans redémarrer l'app.
+
+**Fichiers modifiés :**
+- `plugins/withHealthConnectManifest.js` — ajout de `withActivityAliasAndroid14`
+- `components/KiraOrb3D.js` — fond opaque par défaut + gestion d'erreur avec callback `onErreur`
+- `components/KiraIcon.js` — prop `backgroundColor` + `onErreur` passés à KiraOrb3D, état `erreur3D` pour repli sur l'icône 2D
+
+**Travaux en cours, interrompus par ce lot correctif (à reprendre séparément) :** module
+Budget (`screens/BudgetScreen.js`, écrit mais pas encore intégré à la navigation/aux listes de
+modules) et intégration de l'activité récente des modules Humeur/Objectifs/Minuteur dans le
+contexte du chat Kira (`aiCaller.js`, pas commencé) — David avait demandé ces deux pistes
+juste avant de signaler les bugs Health Connect/3D, priorisés à raison puisque bloquants pour
+ses tests en cours. À livrer dans un prochain lot.
+
+**Note pour la suite (housekeeping git) :** un conflit `git stash` local est survenu en
+resynchronisant le dépôt (fichiers déjà présents côté distant suite au commit/push par David
+des lots 69/70/71) — sans conséquence sur le contenu livré ici, mais à surveiller/nettoyer au
+prochain lot pour éviter d'y laisser un stash orphelin.
+
+**Sujets ouverts, inchangés :**
+- OAuth Google Agenda (erreur 400) — en attente côté David.
+- Home Assistant — en attente du serveur.
+- Tuya/Smart Life — pas de nouveau retour sur la configuration Tuya Cloud.

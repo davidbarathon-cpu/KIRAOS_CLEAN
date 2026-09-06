@@ -46,6 +46,7 @@ export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoil
   // utilisé par le sélecteur d'icônes qui affiche 8 icônes à la fois —
   // faire tourner 8 scènes 3D simultanément serait inutilement lourd).
   const [rendu3D, setRendu3D] = useState(false);
+  const [erreur3D, setErreur3D] = useState(false); // LOT 72 — repli auto si le rendu 3D échoue
   useEffect(() => {
     if (modeEco || apercu) {
       setRendu3D(false);
@@ -59,7 +60,7 @@ export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoil
     // puis revenir en arrière n'avait donc aucun effet visible tant que le
     // composant n'était pas complètement remonté. Voir setRendu3DActif()
     // dans utils/apiKeys.js, qui émet cet événement à chaque changement.
-    const sub = DeviceEventEmitter.addListener('kira:rendu3d-changed', valeur => setRendu3D(valeur));
+    const sub = DeviceEventEmitter.addListener('kira:rendu3d-changed', valeur => { setErreur3D(false); setRendu3D(valeur); });
     return () => sub.remove();
   }, [modeEco, apercu]);
 
@@ -167,8 +168,10 @@ export default function KiraIcon({ size = 44, color = '#6C63FF', iconId = 'etoil
   // LOT 63 — Bascule vers la vraie sphère 3D si activée. Le reste du
   // composant (rendu SVG) sert de version par défaut et de filet de
   // sécurité (aperçus, Mode Éco, ou si le rendu 3D n'est pas activé).
-  if (rendu3D) {
-    return <KiraOrb3D size={size} color={couleurFinale} />;
+  // LOT 72 — si la sphère 3D échoue (onErreur), on bascule automatiquement
+  // sur l'icône 2D habituelle plutôt que de laisser un espace vide.
+  if (rendu3D && !erreur3D) {
+    return <KiraOrb3D size={size} color={couleurFinale} backgroundColor="#07070e" onErreur={() => setErreur3D(true)} />;
   }
 
   return (

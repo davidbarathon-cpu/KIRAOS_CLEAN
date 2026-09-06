@@ -1147,3 +1147,47 @@ prochain lot pour éviter d'y laisser un stash orphelin.
 - OAuth Google Agenda (erreur 400) — en attente côté David.
 - Home Assistant — en attente du serveur.
 - Tuya/Smart Life — pas de nouveau retour sur la configuration Tuya Cloud.
+
+### [10/08/2026] — Lot 73 : module Budget + Kira consciente des nouveaux modules (Humeur/Objectifs/Minuteur/Méditation)
+
+Reprise des deux chantiers mis en pause au lot 72 pour traiter en urgence les bugs Health
+Connect/sphère 3D. David a confirmé ne pas pouvoir installer avant plusieurs jours mais a
+demandé de continuer. **100% JavaScript, `eas update`, aucun rebuild.**
+
+**💰 Budget (`screens/BudgetScreen.js`, écrit avant l'interruption du lot 72, intégré ici) :**
+dernier module de la liste originale du prototype web jamais construit (même pas maquetté
+dans `KiraApp.jsx`, contrairement aux autres). Objectif mensuel éditable
+(`budget_mensuel`), dépenses horodatées par catégorie (`budget_depenses`), filtrage sur le
+mois en cours (`date.slice(0,7)`) pour un reset naturel sans action utilisateur nécessaire,
+répartition visuelle par catégorie. Intégré à la navigation (`App.js`, route `"Budget"`) et
+aux listes de modules (`HomeScreen.js`, `ParametresScreen.js`), même pattern que les lots
+70-71.
+
+**🌟 Contexte d'activité récente pour le chat (`utils/kiraActiviteRecente.js`, nouveau) :**
+nouvelle fonction `construireContexteActiviteRecente()`, même pattern que
+`kiraMemoire.js`/`geoKiraBriefing.js` (lot 56) — lit `humeur_historique`, `objectifs_liste`,
+les stats du `minuteurHistorique.js` (lot 71) et `meditation_historique`, et construit un
+petit paragraphe de contexte injecté dans `buildSystemPrompt()` (`utils/aiCaller.js`)
+UNIQUEMENT si au moins une donnée existe (chaîne vide sinon, pas de paragraphe creux).
+**Consigne de rédaction explicitement ajoutée dans le prompt** (et dans le commentaire du
+fichier) : ces données sont déclarées par l'utilisateur lui-même, à utiliser avec tact,
+jamais comme base d'un diagnostic ou d'une affirmation sur son état mental/émotionnel — Kira
+peut personnaliser sa réponse (féliciter, adapter le ton) mais ne doit jamais interpréter
+cliniquement. Liste des modules mentionnable par Kira dans son message système également mise
+à jour (ajout humeur/minuteur/méditation/objectifs/budget, absents depuis leur création aux
+lots 70-72).
+
+**Fichiers modifiés/créés :**
+- `screens/BudgetScreen.js` (nouveau)
+- `utils/kiraActiviteRecente.js` (nouveau)
+- `App.js`, `screens/HomeScreen.js`, `screens/ParametresScreen.js` — intégration Budget
+- `utils/aiCaller.js` — import + appel de `construireContexteActiviteRecente()`, liste des modules mise à jour
+
+**Housekeeping :** un stash Git local devenu redondant (contenu déjà fusionné via les commits
+de David pour les lots 69-71) a été identifié et supprimé (`git stash drop`) avant de reprendre
+ce lot, pour repartir d'un dépôt local propre.
+
+**Sujets ouverts, inchangés depuis le lot 72 :**
+- Lots 72 (Health Connect + sphère 3D) et 73 (celui-ci) en attente d'installation par David,
+  qui a indiqué ne pas pouvoir tester avant plusieurs jours.
+- OAuth Google Agenda, Home Assistant, Tuya/Smart Life : sans changement.

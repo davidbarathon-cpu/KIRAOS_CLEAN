@@ -16,6 +16,7 @@ import HumeurScreen from './screens/HumeurScreen';
 import MinuteurScreen from './screens/MinuteurScreen';
 import MeditationScreen from './screens/MeditationScreen';
 import ObjectifsScreen from './screens/ObjectifsScreen';
+import BudgetScreen from './screens/BudgetScreen';
 import EcouteRapideScreen from './screens/EcouteRapideScreen';
 import GuitareScreen from './screens/GuitareScreen';
 import HomeScreen from './screens/HomeScreen';
@@ -152,6 +153,7 @@ export default function App() {
           <Stack.Screen name="Minuteur" component={MinuteurScreen} />
           <Stack.Screen name="Meditation" component={MeditationScreen} />
           <Stack.Screen name="Objectifs" component={ObjectifsScreen} />
+          <Stack.Screen name="Budget" component={BudgetScreen} />
           <Stack.Screen name="Parametres" component={ParametresScreen} />
           <Stack.Screen name="ModulePersonnalise" component={ModulePersonnaliseScreen} />
           <Stack.Screen name="CreerModule" component={CreerModuleScreen} />

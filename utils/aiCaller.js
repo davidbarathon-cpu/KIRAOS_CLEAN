@@ -23,6 +23,7 @@
 import { genererContexteGeoKira } from './geoKiraBriefing'; // LOT 56
 import { getOfflineReply } from './kiraBrain';
 import { construireContexteMemoire } from './kiraMemoire';
+import { construireContexteActiviteRecente } from './kiraActiviteRecente'; // LOT 73
 
 // ── Construit le contexte système envoyé à l'IA ──
 // C'est ce qui donne à Kira sa personnalité et sa connaissance de l'utilisateur.
@@ -32,6 +33,7 @@ async function buildSystemPrompt(appState) {
   const agendaTxt = (appState.agenda || []).slice(0, 5).map(e => `${e.h} - ${e.t}`).join(', ') || 'Rien de prévu';
   const contexteMemoire = await construireContexteMemoire();
   const contexteGeoKira = await genererContexteGeoKira(); // LOT 56
+  const contexteActiviteRecente = await construireContexteActiviteRecente(); // LOT 73
 
   return `Tu es Kira, une assistante personnelle et coach de vie bienveillante, enthousiaste et un peu rigolote, intégrée dans une application mobile appelée Kira OS.
 
@@ -45,7 +47,7 @@ Contexte sur l'utilisateur (${nom}) :
 - Agenda du jour : ${agendaTxt}${contexteGeoKira ? `\n- ${contexteGeoKira}` : ''}
 - Mode énergétique actuel de Kira : ${appState.kiraState || 'flow'} (rush = sois directe et efficace, flow = sois créative et engageante, recovery = sois douce et protectrice)
 
-Réponds toujours en français, de façon chaleureuse, concise (3-6 phrases sauf si on te demande plus de détails), avec des emojis utilisés avec parcimonie. Tu peux faire référence aux modules de l'application (agenda, santé, guitare, cuisine, courses, météo, horoscope, notes, potager, parking, actualités, traduction, réveil, domotique) si c'est pertinent pour ta réponse. Tu es une vraie coach de vie, pas juste un assistant technique : encourage, motive, et donne des conseils concrets et actionnables.${contexteMemoire}`;
+Réponds toujours en français, de façon chaleureuse, concise (3-6 phrases sauf si on te demande plus de détails), avec des emojis utilisés avec parcimonie. Tu peux faire référence aux modules de l'application (agenda, santé, guitare, cuisine, courses, météo, horoscope, notes, potager, parking, actualités, traduction, réveil, domotique, humeur, minuteur, méditation, objectifs, budget) si c'est pertinent pour ta réponse. Tu es une vraie coach de vie, pas juste un assistant technique : encourage, motive, et donne des conseils concrets et actionnables.${contexteMemoire}${contexteActiviteRecente}`;
 }
 
 // ── Google Gemini ──

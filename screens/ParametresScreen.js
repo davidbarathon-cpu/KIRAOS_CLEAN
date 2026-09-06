@@ -89,6 +89,7 @@ const TOUS_MODULES = [
   { id: 'minuteur', icon: '⏱️', label: 'Minuteur' },
   { id: 'meditation', icon: '🧘', label: 'Méditation' },
   { id: 'objectifs', icon: '🎯', label: 'Objectifs' },
+  { id: 'budget', icon: '💰', label: 'Budget' },
 ];
 
 const COULEURS_ACCENT = [PALETTE.purple, PALETTE.teal, PALETTE.pink, PALETTE.orange, PALETTE.blue, PALETTE.violet, PALETTE.magenta, PALETTE.green, PALETTE.yellow, PALETTE.cyan];

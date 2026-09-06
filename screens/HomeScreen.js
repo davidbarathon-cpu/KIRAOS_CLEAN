@@ -51,6 +51,7 @@ const TOUS_MODULES = [
   { id: 'minuteur',   icon: '⏱️', label: 'Minuteur',        desc: 'Pomodoro & focus',    color: PALETTE.pink,   screen: 'Minuteur' },
   { id: 'meditation', icon: '🧘', label: 'Méditation',      desc: 'Séances guidées',     color: PALETTE.violet, screen: 'Meditation' },
   { id: 'objectifs',  icon: '🎯', label: 'Objectifs',       desc: 'Suivi & progression', color: PALETTE.blue,   screen: 'Objectifs' },
+  { id: 'budget',     icon: '💰', label: 'Budget',          desc: 'Finances du mois',    color: PALETTE.green,  screen: 'Budget' },
 ];
 
 export default function HomeScreen({ navigation }) {

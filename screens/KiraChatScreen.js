@@ -25,7 +25,8 @@ import { detecterDemandeGeoKira, genererReponseGeoKira } from '../utils/geoKiraB
 import { estConnecteAGoogle } from '../utils/googleAuth';
 import { creerEvenementGoogle, supprimerEvenementGoogle } from '../utils/googleCalendar';
 import { analyzeContext } from '../utils/kiraBrain';
-import { detecterAjoutCourse, detecterAjoutNote, detecterCreationEvenement, detecterDemandeActualites, detecterDemandeBriefing, detecterDemandeTraduction, detecterMemorisation, detecterOubliMemoire, detecterSuppressionEvenement } from '../utils/kiraIntents';
+import { detecterAjoutCourse, detecterAjoutNote, detecterCreationEvenement, detecterDemandeActualites, detecterDemandeBriefing, detecterDemandeTraduction, detecterMemorisation, detecterOubliMemoire, detecterSuppressionEvenement, detecterNotationHumeur, detecterAjoutObjectif, detecterAjoutDepense, detecterDemandeBilanHebdo } from '../utils/kiraIntents';
+import { genererBilanHebdomadaire } from '../utils/kiraBilanHebdo'; // LOT 76
 import { genererTexteBriefing } from '../utils/kiraBriefing';
 import { getResumeActivitePourBriefing } from '../utils/kiraActiviteRecente'; // LOT 74
 import { memoriserFait, oublierTout } from '../utils/kiraMemoire';
@@ -307,6 +308,58 @@ export default function KiraChatScreen({ navigation }) {
       await setData('notes', [...notesActuelles, nouvelleNote]);
       const reponse = `📝 C'est noté ! J'ai ajouté ça dans tes notes : "${texteNote}"`;
       const withReply = [...withUser, { r: 'ai', t: reponse }];
+      await persistChat(withReply);
+      setLoading(false);
+      return;
+    }
+
+    // ── LOT 76 — Notation rapide de l'humeur depuis le chat ──
+    const humeurDetectee = detecterNotationHumeur(msg);
+    if (humeurDetectee) {
+      const aujourdhui = new Date().toISOString().slice(0, 10);
+      const historiqueHumeur = (await getData('humeur_historique')) || [];
+      const autresJours = historiqueHumeur.filter(e => e.date !== aujourdhui);
+      const misAJourHumeur = [...autresJours, { date: aujourdhui, emoji: humeurDetectee.emoji, label: humeurDetectee.label, score: humeurDetectee.score, note: '' }]
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(-60);
+      await setData('humeur_historique', misAJourHumeur);
+      const reponse = `${humeurDetectee.emoji} C'est noté ! Humeur du jour enregistrée : "${humeurDetectee.label}". Prends soin de toi 🌟`;
+      const withReply = [...withUser, { r: 'ai', t: reponse }];
+      await persistChat(withReply);
+      setLoading(false);
+      return;
+    }
+
+    // ── LOT 76 — Création rapide d'objectif depuis le chat ──
+    const titreObjectif = detecterAjoutObjectif(msg);
+    if (titreObjectif) {
+      const objectifsActuels = (await getData('objectifs_liste')) || [];
+      const nouvelObjectif = { id: Date.now(), titre: titreObjectif, categorie: 'perso', progres: 0, dateCreation: new Date().toISOString() };
+      await setData('objectifs_liste', [nouvelObjectif, ...objectifsActuels]);
+      const reponse = `🎯 Objectif ajouté : "${titreObjectif}". Tu peux suivre ta progression dans le module Objectifs !`;
+      const withReply = [...withUser, { r: 'ai', t: reponse }];
+      await persistChat(withReply);
+      setLoading(false);
+      return;
+    }
+
+    // ── LOT 76 — Notation rapide de dépense depuis le chat ──
+    const depenseDetectee = detecterAjoutDepense(msg);
+    if (depenseDetectee) {
+      const depensesActuelles = (await getData('budget_depenses')) || [];
+      const nouvelleDepense = { id: Date.now(), montant: depenseDetectee.montant, categorie: depenseDetectee.categorie, description: depenseDetectee.description, date: new Date().toISOString() };
+      await setData('budget_depenses', [...depensesActuelles, nouvelleDepense]);
+      const reponse = `💰 Dépense de ${depenseDetectee.montant.toFixed(2)} € notée${depenseDetectee.description ? ` (${depenseDetectee.description})` : ''}. Retrouve le détail dans le module Budget.`;
+      const withReply = [...withUser, { r: 'ai', t: reponse }];
+      await persistChat(withReply);
+      setLoading(false);
+      return;
+    }
+
+    // ── LOT 76 — Bilan hebdomadaire ──
+    if (detecterDemandeBilanHebdo(msg)) {
+      const texteBilan = await genererBilanHebdomadaire();
+      const withReply = [...withUser, { r: 'ai', t: texteBilan }];
       await persistChat(withReply);
       setLoading(false);
       return;

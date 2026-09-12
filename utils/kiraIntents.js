@@ -248,3 +248,96 @@ export function detecterDemandeBriefing(message) {
   const low = message.toLowerCase();
   return ['briefing', 'mon récap audio', 'raconte-moi ma journée', 'lis-moi mon résumé'].some(m => low.includes(m));
 }
+
+// ═══════════════════════════════════════════
+//  LOT 76 — Kira peut désormais AGIR sur Humeur / Objectifs / Budget
+//  directement depuis le chat, comme elle le fait déjà pour les courses
+//  et les notes ci-dessus.
+// ═══════════════════════════════════════════
+
+const HUMEURS_MOTS_CLES = [
+  { mots: ['excellent', 'super', 'génial', 'au top'], emoji: '😄', label: 'Excellent', score: 10 },
+  { mots: ['bien', 'bon', 'ça va bien', 'plutôt bien'], emoji: '😊', label: 'Bien', score: 8 },
+  { mots: ['neutre', 'moyen', 'comme ci comme ça', 'bof'], emoji: '😐', label: 'Neutre', score: 6 },
+  { mots: ['pas terrible', 'pas top', 'fatigué', 'fatiguée'], emoji: '😔', label: 'Moyen', score: 4 },
+  { mots: ['difficile', 'mal', 'triste', 'dur'], emoji: '😢', label: 'Difficile', score: 2 },
+];
+
+/**
+ * Détecte une notation d'humeur du type "note mon humeur : bien",
+ * "je me sens plutôt fatigué", "mon humeur est difficile aujourd'hui".
+ * Retourne { emoji, label, score } si détecté, sinon null.
+ */
+export function detecterNotationHumeur(message) {
+  const low = message.toLowerCase();
+  const declencheurs = ['note mon humeur', 'mon humeur', 'je me sens', 'humeur du jour'];
+  if (!declencheurs.some(d => low.includes(d))) return null;
+
+  for (const { mots, emoji, label, score } of HUMEURS_MOTS_CLES) {
+    if (mots.some(m => low.includes(m))) {
+      return { emoji, label, score };
+    }
+  }
+  return null;
+}
+
+/**
+ * Détecte une demande de création d'objectif : "ajoute un objectif :
+ * courir 10km", "crée un objectif apprendre le piano", "nouvel objectif :
+ * lire 12 livres cette année". Retourne le titre (texte libre), ou null.
+ */
+export function detecterAjoutObjectif(message) {
+  const low = message.toLowerCase();
+  const declencheurs = ['ajoute un objectif', 'crée un objectif', 'cree un objectif', 'nouvel objectif', 'nouveau objectif'];
+  const trouve = declencheurs.find(d => low.includes(d));
+  if (!trouve) return null;
+
+  const apres = message.slice(low.indexOf(trouve) + trouve.length);
+  const titre = apres.replace(/^[\s:,\-]+/, '').trim();
+  return titre || null;
+}
+
+const CATEGORIES_DEPENSE_MOTS = {
+  alimentation: 'alimentation', courses: 'alimentation', nourriture: 'alimentation',
+  logement: 'logement', loyer: 'logement',
+  transport: 'transport', essence: 'transport', carburant: 'transport',
+  loisir: 'loisirs', loisirs: 'loisirs', sortie: 'loisirs',
+  santé: 'sante', sante: 'sante', pharmacie: 'sante',
+};
+
+/**
+ * Détecte une notation de dépense du type "note une dépense de 20€ en
+ * courses", "j'ai dépensé 15 euros pour de l'essence", "ajoute une
+ * dépense de 50€". Le montant est obligatoire (sans lui, pas de détection
+ * fiable) ; catégorie et description sont du mieux possible, avec repli
+ * sur "autre"/vide. Retourne { montant, categorie, description } ou null.
+ */
+export function detecterAjoutDepense(message) {
+  const low = message.toLowerCase();
+  const declencheurs = ['note une dépense', 'note une depense', 'ajoute une dépense', 'ajoute une depense', "j'ai dépensé", "j'ai depense"];
+  if (!declencheurs.some(d => low.includes(d))) return null;
+
+  const matchMontant = message.match(/(\d+[.,]?\d*)\s*(?:€|euros?)/i);
+  if (!matchMontant) return null;
+  const montant = parseFloat(matchMontant[1].replace(',', '.'));
+  if (isNaN(montant) || montant <= 0) return null;
+
+  let categorie = 'autre';
+  for (const [mot, cat] of Object.entries(CATEGORIES_DEPENSE_MOTS)) {
+    if (low.includes(mot)) { categorie = cat; break; }
+  }
+
+  const matchDesc = message.match(/pour\s+(.+?)(?:\s+en\s+\w+)?\s*$/i);
+  const description = matchDesc ? matchDesc[1].trim() : '';
+
+  return { montant, categorie, description };
+}
+
+/**
+ * Détecte une demande de bilan hebdomadaire : "bilan de la semaine",
+ * "résumé hebdomadaire", "comment s'est passée ma semaine".
+ */
+export function detecterDemandeBilanHebdo(message) {
+  const low = message.toLowerCase();
+  return ['bilan de la semaine', 'bilan hebdo', 'résumé hebdomadaire', 'resume hebdomadaire', "comment s'est passée ma semaine", 'récap de la semaine', 'recap de la semaine'].some(m => low.includes(m));
+}

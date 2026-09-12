@@ -57,6 +57,18 @@ export async function getKiraWidgetSnapshot() {
   const prochain = list.find(e => parseInt(e.h, 10) >= h) || null;
   const dicton = getDictonDuJour(now);
 
+  // LOT 76 — Humeur du jour + prochain objectif, affichés sur le widget.
+  // Logique dupliquée en version simple ici plutôt que d'importer les
+  // écrans complets (voir note "IMPORTANT" en tête de fichier).
+  const humeurHistorique = (await getData('humeur_historique')) || [];
+  const aujourdhuiStr = now.toISOString().slice(0, 10);
+  const entreeHumeurDuJour = humeurHistorique.find(e => e.date === aujourdhuiStr);
+  const humeurDuJour = entreeHumeurDuJour ? { emoji: entreeHumeurDuJour.emoji, label: entreeHumeurDuJour.label } : null;
+
+  const objectifsListe = (await getData('objectifs_liste')) || [];
+  const premierObjectifEnCours = objectifsListe.find(o => o.progres < 100);
+  const prochainObjectif = premierObjectifEnCours ? { titre: premierObjectifEnCours.titre, progres: premierObjectifEnCours.progres } : null;
+
   return {
     heure,
     date,
@@ -69,6 +81,8 @@ export async function getKiraWidgetSnapshot() {
     prochainEvenement: prochain ? { heure: prochain.h, titre: (prochain.t || '').slice(0, 40) } : null,
     meteo: meteoCache || { temp: null, icon: '⛅' },
     dicton: { t: (dicton.t || '').slice(0, 90) },
+    humeurDuJour, // LOT 76
+    prochainObjectif: prochainObjectif ? { ...prochainObjectif, titre: prochainObjectif.titre.slice(0, 30) } : null, // LOT 76
   };
 }
 

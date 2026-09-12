@@ -129,6 +129,36 @@ export function KiraMaxiWidget({ data }) {
           />
         </FlexWidget>
 
+        {/* LOT 76 — Humeur du jour + prochain objectif (uniquement si renseignés) */}
+        {(d.humeurDuJour || d.prochainObjectif) && (
+          <FlexWidget style={{ flexDirection: 'row', width: 'match_parent', marginTop: 10 }}>
+            {d.humeurDuJour && (
+              <FlexWidget
+                style={{
+                  flexDirection: 'row', alignItems: 'center', flex: 1,
+                  backgroundColor: C.cardBg, borderRadius: 12, padding: 10, marginRight: 8,
+                }}
+              >
+                <TextWidget text={d.humeurDuJour.emoji} style={{ fontSize: 15, marginRight: 6 }} />
+                <TextWidget text={d.humeurDuJour.label} style={{ fontSize: 10, color: C.muted }} />
+              </FlexWidget>
+            )}
+            {d.prochainObjectif && (
+              <FlexWidget
+                clickAction="OPEN_URI"
+                clickActionData={{ uri: 'kiraosclean://objectifs' }}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', flex: 1,
+                  backgroundColor: C.cardBg, borderRadius: 12, padding: 10,
+                }}
+              >
+                <TextWidget text="🎯" style={{ fontSize: 13, marginRight: 6 }} />
+                <TextWidget text={`${d.prochainObjectif.titre} (${d.prochainObjectif.progres}%)`} style={{ fontSize: 10, color: C.white }} />
+              </FlexWidget>
+            )}
+          </FlexWidget>
+        )}
+
         {/* Dicton du jour */}
         <TextWidget
           text={d.dicton?.t ? `"${d.dicton.t}"` : ''}

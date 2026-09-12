@@ -1287,3 +1287,96 @@ Chaque module actif apparaît exactement une fois (pas de duplication entre les 
 **Sujets ouverts, inchangés :**
 - Lots 72, 73, 74 et 75 tous en attente d'installation par David.
 - OAuth Google Agenda, Home Assistant, Tuya/Smart Life : sans changement.
+
+### [18/08/2026] — Lot 76 : Kira agit depuis le chat + Bilan hebdo + Widget enrichi — SESSION LONGUE, REPRISE DANS UNE NOUVELLE DISCUSSION
+
+David a confirmé avoir installé **tous les lots jusqu'au 75 inclus**. Cette session étant
+devenue trop longue, la conversation reprend dans un nouveau fil — cette entrée sert de
+passation complète, à lire en premier.
+
+## ✅ Lot 76 — terminé et livré ce lot-ci
+
+David avait choisi les 3 idées suivantes (sur proposition) : **100% JavaScript, `eas update`,
+aucun rebuild.**
+
+1. **🗣️ Kira agit depuis le chat** (`utils/kiraIntents.js` : `detecterNotationHumeur`,
+   `detecterAjoutObjectif`, `detecterAjoutDepense`, `detecterDemandeBilanHebdo` ; câblé dans
+   `screens/KiraChatScreen.js` avec le même pattern que les intentions existantes
+   courses/notes — action directe + réponse de confirmation, sans passer par l'IA générale).
+2. **📊 Bilan hebdomadaire** (`utils/kiraBilanHebdo.js`, nouveau —
+   `genererBilanHebdomadaire()` agrège santé du jour, stats guitare (`guitareProgression.js`),
+   dépenses de la semaine vs budget mensuel, objectifs en cours/atteints, tendance d'humeur
+   sur 7 jours ; déclenché depuis le chat via `detecterDemandeBilanHebdo`).
+3. **📱 Widget enrichi** (`utils/widgetUpdater.js` + `widget/KiraMaxiWidget.js` : le widget
+   plein écran affiche désormais l'humeur du jour et le prochain objectif en cours, si
+   renseignés — logique dupliquée en version simple dans widgetUpdater.js, comme le reste du
+   fichier, pour ne pas importer les écrans complets dans le contexte headless du widget).
+
+**Livré dans `KiraOS_Lot76.zip`** : `utils/kiraIntents.js`, `utils/kiraBilanHebdo.js`,
+`utils/widgetUpdater.js`, `screens/KiraChatScreen.js`, `widget/KiraMaxiWidget.js`.
+
+## 🚧 PAS ENCORE FAIT — à reprendre en priorité dans la nouvelle discussion
+
+**Favoris de recettes + livre de recettes (module Cuisine)** — demande explicite de David
+faite en fin de session, jamais commencée. Idée : pouvoir marquer une recette comme favorite
+(bouton ⭐ sur `screens/CuisineScreen.js`), et un écran "Mes recettes favorites" (livre de
+recettes personnel) listant celles qu'il a aimées, consultable même les jours où Kira
+propose autre chose. Réfléchir à la structure de données (probablement une clé
+`cuisine_favoris` avec les recettes complètes sauvegardées, pas juste des ids, puisque les
+recettes générées par IA changent chaque jour et ne sont pas ré-consultables sinon).
+
+## ⚠️ Point à vérifier avec David en priorité dans la nouvelle discussion
+
+David a dit avoir **installé** les lots jusqu'au 75, mais n'a pas confirmé avoir **testé** les
+points en suspens depuis le lot 72 :
+- Le plantage Health Connect est-il résolu (activity-alias Android 14+, lot 72) ?
+- La sphère 3D s'affiche-t-elle enfin, ou l'icône 2D de secours s'affiche-t-elle à la place
+  (lot 72) ? Si l'icône de secours s'affiche, demander un `adb logcat | grep KiraOrb3D` pour
+  la cause exacte.
+- Le module Budget, la conscience de Kira (lot 73), l'import de sauvegarde et le briefing
+  enrichi (lot 74), les modules suggérés selon l'heure (lot 75) fonctionnent-ils comme prévu ?
+
+**Poser la question dès le début de la nouvelle discussion plutôt que de supposer que tout va
+bien.**
+
+## 🗂️ Repères techniques pour la suite
+
+- **Deux redémarrages de l'environnement de travail de Claude** sont survenus pendant cette
+  session (perte du clone local + travail non poussé à chaque fois). Récupérés intégralement
+  les deux fois en ré-extrayant les ZIP déjà livrés à David (toujours disponibles côté sortie
+  tant qu'ils n'ont pas expiré) par-dessus un nouveau `git clone`, plutôt que de tout refaire
+  de mémoire. Réflexe à reproduire si ça se reproduit : lister les ZIP disponibles, les
+  réextraire dans l'ordre chronologique par-dessus un clone frais AVANT de recommencer quoi
+  que ce soit.
+- Le dépôt GitHub réel ne contient à ce jour que jusqu'au **lot 71** committé par David — les
+  lots 72 à 76 n'existent que dans les ZIP livrés, pas encore poussés sur GitHub par David
+  (à confirmer/mettre à jour dans la nouvelle discussion selon ce qu'il aura effectivement
+  poussé entre-temps). Toujours `git pull` en début de session pour repartir de l'état réel.
+- `screens/HomeScreen.js`, `screens/ParametresScreen.js` et `utils/aiCaller.js` ont chacun
+  été modifiés par plusieurs lots successifs (73, 74, 75 pour HomeScreen.js notamment) — les
+  versions livrées dans chaque ZIP sont cumulatives (contiennent tous les changements des
+  lots précédents), pas des diffs isolés.
+- David gère lui-même une partie de ses soucis de build en dehors des sessions avec Claude
+  (voir historique Git : commits `expo-three`, `EAS_BUILD_NPM_CI_DISABLED`,
+  `compileSdkVersion`/`targetSdkVersion` 36...) — toujours vérifier l'état réel du dépôt
+  plutôt que de supposer qu'il correspond exactement à ce qui est documenté ici.
+
+## 📌 Sujets ouverts, sans changement depuis plusieurs lots
+
+- OAuth Google Agenda (erreur 400) — en attente que David vérifie son Google Cloud Console
+  (type de client "Android", SHA-1 du build preview).
+- Home Assistant — en attente que David ait son serveur installé et accessible.
+- Tuya/Smart Life — driver déjà livré au lot 46, guide de configuration du projet Tuya Cloud
+  donné en conversation (pas dans un fichier) ; pas de retour de David sur Client ID/Secret/UID.
+- Guide audio/voix pour la Méditation (lot 71) — actuellement texte seul, amélioration future
+  possible.
+- Sélecteur de fichier natif pour l'import de sauvegarde (lot 74) — actuellement copier-coller
+  de texte JSON ; `expo-document-picker` pourrait remplacer ça proprement le jour où un
+  rebuild natif est de toute façon nécessaire pour autre chose.
+
+## 💬 Pour démarrer la nouvelle discussion
+
+David : donne ce fichier `KIRA_CONTEXT.md` à jour (avec cette entrée) à Claude en début de
+nouvelle discussion, précise que le lot 76 vient d'être livré, et réponds si possible aux
+questions de vérification ci-dessus (Health Connect, sphère 3D, autres lots) avant de repartir
+sur le lot 77 (favoris de recettes).

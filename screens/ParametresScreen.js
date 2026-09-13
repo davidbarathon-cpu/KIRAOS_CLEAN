@@ -94,11 +94,21 @@ const TOUS_MODULES = [
 
 const COULEURS_ACCENT = [PALETTE.purple, PALETTE.teal, PALETTE.pink, PALETTE.orange, PALETTE.blue, PALETTE.violet, PALETTE.magenta, PALETTE.green, PALETTE.yellow, PALETTE.cyan];
 
+// LOT 77 — demande de David : choisir quels cercles apparaissent en haut de
+// l'écran Santé (Pas/kcal/Sommeil/Eau), 1 ou plusieurs selon son envie.
+const CERCLES_SANTE = [
+  { id: 'pas', icon: '👣', label: 'Pas' },
+  { id: 'kcal', icon: '🔥', label: 'Calories' },
+  { id: 'som', icon: '😴', label: 'Sommeil' },
+  { id: 'eau', icon: '💧', label: 'Eau' },
+];
+
 export default function ParametresScreen({ navigation }) {
   const [section, setSection] = useState('profil');
   const [profil, setProfil] = useState({});
   const [prefs, setPrefs] = useState({});
   const [modulesActifs, setModulesActifs] = useState([]);
+  const [cerclesSante, setCerclesSante] = useState(CERCLES_SANTE.map(c => c.id)); // LOT 77
   const [modulesPersonnalises, setModulesPersonnalises] = useState([]);
   const [saved, setSaved] = useState(false);
   const [exportEnCours, setExportEnCours] = useState(false); // LOT 58
@@ -172,6 +182,8 @@ export default function ParametresScreen({ navigation }) {
       setRendu3DActifState(await getRendu3DActif()); // LOT 63
       setEcouteActive(ecoutePermanenteActive());
       setHcConnecteState(await estConnecteAHealthConnect());
+      const cerclesSauves = await getData('sante_cercles_visibles'); // LOT 77
+      setCerclesSante(Array.isArray(cerclesSauves) && cerclesSauves.length ? cerclesSauves : CERCLES_SANTE.map(c => c.id));
       const tuyaConfig = await getTuyaConfigActuelle();
       setTuyaForm({
         clientId: tuyaConfig.clientId || '',
@@ -202,6 +214,16 @@ export default function ParametresScreen({ navigation }) {
     const updated = modulesActifs.includes(id) ? modulesActifs.filter(x => x !== id) : [...modulesActifs, id];
     setModulesActifs(updated);
     await setData('modules_actifs', updated);
+  };
+
+  // LOT 77 — au moins un cercle doit rester affiché, sinon l'écran Santé
+  // se retrouverait vide en haut sans explication pour David.
+  const toggleCercleSante = async id => {
+    const dejaActif = cerclesSante.includes(id);
+    if (dejaActif && cerclesSante.length === 1) return;
+    const updated = dejaActif ? cerclesSante.filter(x => x !== id) : [...cerclesSante, id];
+    setCerclesSante(updated);
+    await setData('sante_cercles_visibles', updated);
   };
 
   // ── Gestion des clés API ──
@@ -519,6 +541,18 @@ export default function ParametresScreen({ navigation }) {
               {widgetMsg && <Text style={styles.savedText}>{widgetMsg}</Text>}
             </View>
           )}
+          <SectionLabel style={{ marginTop: 18 }}>❤️ Cercles affichés dans Santé</SectionLabel>
+          <Text style={styles.infoSmall}>Choisis quelles statistiques apparaissent en haut de l'écran Santé.</Text>
+          {CERCLES_SANTE.map(c => {
+            const on = cerclesSante.includes(c.id);
+            return (
+              <View key={c.id} style={[styles.moduleRow, { opacity: on ? 1 : 0.5 }]}>
+                <Text style={{ fontSize: 16 }}>{c.icon}</Text>
+                <Text style={styles.moduleLabel}>{c.label}</Text>
+                <Toggle value={on} onChange={() => toggleCercleSante(c.id)} color={accent} />
+              </View>
+            );
+          })}
         </View>
       );
     }

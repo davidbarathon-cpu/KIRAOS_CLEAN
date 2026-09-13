@@ -22,6 +22,34 @@ import { useKiraTheme } from '../utils/useTheme';
 const CATEGORIES = ['Épicerie', 'Viande', 'Légumes', 'Fruits', 'Laitiers', 'Boulangerie', 'Boissons', 'Hygiène'];
 const SUGGESTIONS_RAPIDES = ['Lait', 'Oeufs', 'Pain', 'Poulet', 'Avocat', 'Bananes', 'Riz', 'Tomates', 'Fromage'];
 
+// LOT 77 — CORRECTIF : le "Conseil Kira" affichait un texte fixe ("poulet
+// rôti... citrons, thym...") jamais relié aux vraies recettes du jour,
+// signalé par David comme "toujours la même chose, pas en rapport avec les
+// recettes". On relit maintenant le cache du module Cuisine
+// ('cuisine_recettes_cache', voir utils/cuisineCaller.js) et on compare ses
+// ingrédients à la liste de courses actuelle pour ne signaler que ce qui
+// manque réellement.
+const CLE_CACHE_RECETTES = 'cuisine_recettes_cache';
+
+/** Extrait le nom "utile" d'un ingrédient brut ("500g potiron" -> "potiron"),
+ * en retirant quantités/unités usuelles en tête de chaîne. Reste volontairement
+ * simple : sert juste à comparer avec les noms d'articles de la liste. */
+function nomIngredientNettoye(ingredientBrut) {
+  return ingredientBrut
+    .toLowerCase()
+    .replace(/^[\d.,/]+\s*(g|kg|ml|cl|l|cuillères?( à (soupe|café))?|c\.à\.[sc]|pincée[s]?|tranches?|gousses?|feuilles?)?\s*(de\s|d')?/i, '')
+    .trim();
+}
+
+function ingredientDejaDansListe(ingredientBrut, itemsCourses) {
+  const cible = nomIngredientNettoye(ingredientBrut);
+  if (!cible) return true;
+  return itemsCourses.some(i => {
+    const nomArticle = i.n.toLowerCase();
+    return nomArticle.includes(cible) || cible.includes(nomArticle);
+  });
+}
+
 const DEFAULT_COURSES = [
   { id: 1, n: 'Lait demi-écrémé', cat: 'Laitiers', q: '2L', done: false },
   { id: 2, n: 'Poulet fermier', cat: 'Viande', q: '1kg', done: false },
@@ -34,6 +62,7 @@ export default function CoursesScreen({ navigation }) {
   const [items, setItems] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [newItem, setNewItem] = useState({ n: '', q: '1', cat: CATEGORIES[0] });
+  const [recetteDuJour, setRecetteDuJour] = useState(null); // LOT 77
 
   // BUGFIX : l'ancienne condition (`c && c.length ? c : DEFAULT_COURSES`) traitait une
   // liste vidée par l'utilisateur (tableau vide, donc "length" à 0) comme une absence de
@@ -43,6 +72,17 @@ export default function CoursesScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       getData('courses').then(c => setItems(Array.isArray(c) ? c : DEFAULT_COURSES));
+      // LOT 77 : recharge aussi le menu du jour à chaque passage sur l'écran,
+      // pour rester à jour si le module Cuisine vient d'être régénéré.
+      getData(CLE_CACHE_RECETTES).then(cache => {
+        const dateAujourdhui = new Date().toLocaleDateString('fr-FR');
+        if (cache && cache.date === dateAujourdhui && Array.isArray(cache.recettes)) {
+          const plat = cache.recettes.find(r => r.type === 'Plat') || cache.recettes[0];
+          setRecetteDuJour(plat || null);
+        } else {
+          setRecetteDuJour(null);
+        }
+      });
     }, [])
   );
 
@@ -77,6 +117,20 @@ export default function CoursesScreen({ navigation }) {
   const doneCount = items.filter(i => i.done).length;
   const total = items.length;
   const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+
+  // LOT 77 — CORRECTIF conseil Kira : construit un message qui dépend
+  // vraiment de la recette du jour (module Cuisine) et de ce qui manque
+  // dans la liste, au lieu du texte fixe précédent.
+  const conseilKira = (() => {
+    if (!recetteDuJour) {
+      return "Va d'abord voir le menu du jour dans Cuisine 🍳 — je pourrai te dire ce qu'il te manque pour le préparer.";
+    }
+    const manquants = (recetteDuJour.ingredients || []).filter(ing => !ingredientDejaDansListe(ing, items));
+    if (manquants.length === 0) {
+      return `Tout est déjà dans ta liste pour "${recetteDuJour.titre}" de ce soir. 👍`;
+    }
+    return `Pour "${recetteDuJour.titre}" de ce soir, il te faudra ${manquants.join(', ')}. Tout est dans ta liste ?`;
+  })();
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
@@ -211,10 +265,7 @@ export default function CoursesScreen({ navigation }) {
         {/* Conseil Kira */}
         <View style={[styles.coachBox, { borderColor: theme.accent + '30', backgroundColor: theme.accent + '10' }]}>
           <Text style={[styles.coachLabel, { color: PALETTE.violet }]}>🌟 Kira suggère :</Text>
-          <Text style={styles.coachText}>
-            Pour le poulet rôti de ce soir, il te faudra citrons, thym frais, ail et huile
-            d'olive. Tout est dans ta liste ?
-          </Text>
+          <Text style={styles.coachText}>{conseilKira}</Text>
         </View>
 
         <Text style={styles.comingSoon}>

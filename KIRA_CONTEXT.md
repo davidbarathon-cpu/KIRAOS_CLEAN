@@ -1315,29 +1315,64 @@ aucun rebuild.**
 **Livré dans `KiraOS_Lot76.zip`** : `utils/kiraIntents.js`, `utils/kiraBilanHebdo.js`,
 `utils/widgetUpdater.js`, `screens/KiraChatScreen.js`, `widget/KiraMaxiWidget.js`.
 
-## 🚧 PAS ENCORE FAIT — à reprendre en priorité dans la nouvelle discussion
+## ✅ Lot 77 — Health Connect résolu + nouvelle fonctionnalité (cercles santé personnalisables)
+
+**Health Connect enfin fonctionnel.** Cause confirmée : le dossier `android/` de David est
+dans `.gitignore` et n'est régénéré que par `npx expo prebuild`, jamais par un simple
+`./gradlew assembleRelease`. Le manifeste Android compilé ne contenait donc jamais les
+correctifs des lots 69/72 (activity-alias, permission delegate). Un `npx expo prebuild --clean`
+a résolu le souci (+ un `android/local.properties` à recréer manuellement après coup, ce
+fichier n'étant pas versionné et étant supprimé par `--clean`). **Point de procédure à retenir
+pour la suite : après tout correctif touchant à `app.json`/aux plugins Android, dire clairement
+à David qu'un `npx expo prebuild` (pas juste un rebuild gradle direct) est nécessaire.**
+
+**Nouvelle fonctionnalité livrée** : David peut maintenant choisir, dans Paramètres → Apparence,
+quels cercles (Pas / Calories / Sommeil / Eau) s'affichent en haut de l'écran Santé — 1 ou
+plusieurs au choix, au moins 1 toujours forcé pour éviter un écran vide. Réglage stocké sous la
+clé `sante_cercles_visibles` (tableau d'ids), relu à chaque focus sur l'écran Santé.
+Fichiers modifiés : `screens/ParametresScreen.js` (liste `CERCLES_SANTE`, état, toggle,
+UI dans la section apparence), `screens/SanteScreen.js` (lecture du réglage, affichage
+conditionnel des 4 `ringBox`).
+
+**🚧 Sphère 3D toujours non résolue.** David confirme : l'icône reste strictement identique
+(pixel pour pixel) au toggle, sans aucune animation. Ce n'est donc probablement pas un souci
+de plugin/manifeste comme Health Connect (les modules `expo-gl`/`expo-three`/`three` sont de
+simples dépendances autolinkées par Gradle, qui fonctionnent même sans prebuild) — plutôt un
+bug d'exécution réel dans `KiraOrb3D.js`/`expo-gl` sur ce téléphone (Redmi Note 13 Pro 5G,
+Android 16 / HyperOS). Toujours besoin d'un `adb logcat` ou d'une capture LogFox pendant
+l'activation du toggle pour avancer — non fourni à ce stade.
+
+## ✅ Lot 78 — Favoris de recettes (livre de recettes personnel)
+
+Fonctionnalité demandée depuis le lot 76, enfin livrée. Comme les recettes du jour sont
+générées par IA et changent chaque jour (pas d'id stable), on stocke la **recette complète**
+au moment du clic sur ⭐, pas juste une référence — sinon impossible de la revoir plus tard.
+
+**Nouveau fichier** `utils/cuisineFavoris.js` : logique centralisée (`getFavoris`,
+`toggleFavori`, `retirerFavori`), clé de stockage `cuisine_favoris` (tableau d'objets recette
++ `id` + `dateAjout`). Une recette est identifiée par `titre + type` (pas d'id IA stable
+d'un jour à l'autre).
+
+**`screens/CuisineScreen.js`** : bouton ⭐/☆ sur chaque carte de la liste du jour ET dans la
+vue détail ; bouton "⭐ Mes favoris" dans le header principal pour accéder au livre de recettes.
+
+**Nouvel écran `screens/CuisineFavorisScreen.js`** : liste des recettes favorites (mêmes infos
+que la liste du jour), clic pour voir le détail complet (ingrédients/étapes/conseil, comme
+dans Cuisine), bouton ⭐ dans le détail pour retirer (avec confirmation). Message d'état vide
+si aucun favori pour l'instant.
+
+**`App.js`** : nouvelle route `CuisineFavoris` enregistrée dans le Stack Navigator.
+
+Aucune nouvelle dépendance — pas de `npm install` ni de `prebuild` nécessaires, juste un
+rebuild classique.
 
 **Favoris de recettes + livre de recettes (module Cuisine)** — demande explicite de David
-faite en fin de session, jamais commencée. Idée : pouvoir marquer une recette comme favorite
-(bouton ⭐ sur `screens/CuisineScreen.js`), et un écran "Mes recettes favorites" (livre de
-recettes personnel) listant celles qu'il a aimées, consultable même les jours où Kira
+faite en fin de session (lot 76), jamais commencée. Idée : pouvoir marquer une recette comme
+favorite (bouton ⭐ sur `screens/CuisineScreen.js`), et un écran "Mes recettes favorites" (livre
+de recettes personnel) listant celles qu'il a aimées, consultable même les jours où Kira
 propose autre chose. Réfléchir à la structure de données (probablement une clé
 `cuisine_favoris` avec les recettes complètes sauvegardées, pas juste des ids, puisque les
 recettes générées par IA changent chaque jour et ne sont pas ré-consultables sinon).
-
-## ⚠️ Point à vérifier avec David en priorité dans la nouvelle discussion
-
-David a dit avoir **installé** les lots jusqu'au 75, mais n'a pas confirmé avoir **testé** les
-points en suspens depuis le lot 72 :
-- Le plantage Health Connect est-il résolu (activity-alias Android 14+, lot 72) ?
-- La sphère 3D s'affiche-t-elle enfin, ou l'icône 2D de secours s'affiche-t-elle à la place
-  (lot 72) ? Si l'icône de secours s'affiche, demander un `adb logcat | grep KiraOrb3D` pour
-  la cause exacte.
-- Le module Budget, la conscience de Kira (lot 73), l'import de sauvegarde et le briefing
-  enrichi (lot 74), les modules suggérés selon l'heure (lot 75) fonctionnent-ils comme prévu ?
-
-**Poser la question dès le début de la nouvelle discussion plutôt que de supposer que tout va
-bien.**
 
 ## 🗂️ Repères techniques pour la suite
 
@@ -1363,6 +1398,11 @@ bien.**
 
 ## 📌 Sujets ouverts, sans changement depuis plusieurs lots
 
+- **Sphère 3D (lots 63, 72, 77)** — toggle sans aucun effet, icône pixel-identique, sans
+  animation. LogFox n'est pas disponible sur le Play Store de David — pas de logcat obtenu.
+  David a choisi de mettre ce point de côté pour avancer sur d'autres tâches ; à reprendre
+  si une autre méthode de capture de logs se présente, ou en dernier recours en demandant
+  d'essayer une appli équivalente (MatLog, aLogcat) ou un branchement USB + adb depuis un PC.
 - OAuth Google Agenda (erreur 400) — en attente que David vérifie son Google Cloud Console
   (type de client "Android", SHA-1 du build preview).
 - Home Assistant — en attente que David ait son serveur installé et accessible.
@@ -1374,9 +1414,18 @@ bien.**
   de texte JSON ; `expo-document-picker` pourrait remplacer ça proprement le jour où un
   rebuild natif est de toute façon nécessaire pour autre chose.
 
+## 🎓 Leçon retenue ce lot-ci (procédure de build)
+
+Après tout changement touchant `app.json`, ses plugins, ou toute dépendance native, **toujours
+rappeler à David de faire un `npx expo prebuild` avant son build gradle habituel** (pas
+seulement `./gradlew assembleRelease` sur un dossier `android/` déjà existant) — sinon les
+changements de manifeste/permissions ne sont jamais réellement appliqués. C'est ce qui a
+causé plusieurs lots "inefficaces" sur Health Connect (69, 72) avant d'être compris au lot 77.
+
 ## 💬 Pour démarrer la nouvelle discussion
 
 David : donne ce fichier `KIRA_CONTEXT.md` à jour (avec cette entrée) à Claude en début de
-nouvelle discussion, précise que le lot 76 vient d'être livré, et réponds si possible aux
-questions de vérification ci-dessus (Health Connect, sphère 3D, autres lots) avant de repartir
-sur le lot 77 (favoris de recettes).
+nouvelle discussion. Lots 77 (Health Connect + cercles santé personnalisables) et 78 (favoris
+de recettes) sont terminés et livrés. Seule la sphère 3D reste ouverte (voir "Sujets ouverts"
+ci-dessus), mise de côté pour l'instant faute de logs disponibles. Demander à David s'il a du
+nouveau à tester ou une nouvelle idée de fonctionnalité pour le lot 79.

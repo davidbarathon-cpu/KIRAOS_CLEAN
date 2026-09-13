@@ -4,13 +4,16 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as QuickActions from 'expo-quick-actions';
 import { StatusBar } from 'expo-status-bar';
+import * as NavigationBar from 'expo-navigation-bar'; // LOT 77 — barre système Android
 import { useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 
 import ActualitesScreen from './screens/ActualitesScreen';
 import AgendaScreen from './screens/AgendaScreen';
 import CoursesScreen from './screens/CoursesScreen';
 import CreerModuleScreen from './screens/CreerModuleScreen';
 import CuisineScreen from './screens/CuisineScreen';
+import CuisineFavorisScreen from './screens/CuisineFavorisScreen';
 import DomotiqueScreen from './screens/DomotiqueScreen';
 import HumeurScreen from './screens/HumeurScreen';
 import MinuteurScreen from './screens/MinuteurScreen';
@@ -98,6 +101,24 @@ export default function App() {
     })();
   }, []);
 
+  // LOT 77 — CORRECTIF : David a signalé que la barre système Android (en
+  // bas de l'écran) reste toujours visible et masque parfois du texte.
+  // CORRECTIF DU CORRECTIF (même lot) : la première version appelait aussi
+  // setPositionAsync() et setBehaviorAsync(), qui ne sont plus supportées
+  // depuis que le mode "edge-to-edge" est actif par défaut (Expo SDK 53+,
+  // confirmé ici par targetSdk 36 dans le log de build) — ces deux appels
+  // faisaient planter l'app au lancement, AVANT même que le .catch() ne
+  // puisse s'appliquer. Seul setVisibilityAsync('hidden') reste réellement
+  // pris en charge en edge-to-edge ; le comportement "glisser depuis le bas
+  // pour la faire réapparaître un instant" est déjà celui par défaut
+  // d'Android une fois la barre masquée via cette API, donc rien d'autre
+  // n'est nécessaire. iOS n'a pas cette barre — effet ignoré sur cette
+  // plateforme.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    NavigationBar.setVisibilityAsync('hidden').catch(() => {});
+  }, []);
+
   // ── Écoute le déclenchement du Shortcut, que l'app soit déjà ouverte
   // (cas "warm start") ou lancée fraîchement depuis le shortcut (cas "cold start") ──
   useEffect(() => {
@@ -139,6 +160,7 @@ export default function App() {
           <Stack.Screen name="KiraChat" component={KiraChatScreen} />
           <Stack.Screen name="Guitare" component={GuitareScreen} />
           <Stack.Screen name="Cuisine" component={CuisineScreen} />
+          <Stack.Screen name="CuisineFavoris" component={CuisineFavorisScreen} />
           <Stack.Screen name="Courses" component={CoursesScreen} />
           <Stack.Screen name="Meteo" component={MeteoScreen} />
           <Stack.Screen name="Horoscope" component={HoroscopeScreen} />

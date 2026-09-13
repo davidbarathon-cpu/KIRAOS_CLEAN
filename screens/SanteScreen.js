@@ -18,6 +18,7 @@ import {
   synchroniserDepuisHealthConnect,
 } from '../utils/healthConnectService';
 import { ajouterEau, genererConseilSante, getSanteDuJour, mettreAJourSante } from '../utils/santeManager';
+import { getData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
 import { useKiraTheme } from '../utils/useTheme';
 import { refreshKiraWidget } from '../utils/widgetUpdater';
@@ -37,6 +38,7 @@ export default function SanteScreen({ navigation }) {
   const [hcConnecte, setHcConnecte] = useState(false);
   const [hcSyncEnCours, setHcSyncEnCours] = useState(false);
   const [hcErreur, setHcErreur] = useState(null);
+  const [cerclesVisibles, setCerclesVisibles] = useState(['pas', 'kcal', 'som', 'eau']); // LOT 77
 
   const charger = useCallback(async () => {
     const connecte = await estConnecteAHealthConnect();
@@ -51,6 +53,11 @@ export default function SanteScreen({ navigation }) {
 
     const data = await getSanteDuJour();
     setSante(data);
+
+    // LOT 77 — relit à chaque focus pour rester à jour si David change son
+    // choix dans Paramètres puis revient sur cet écran.
+    const cercles = await getData('sante_cercles_visibles');
+    setCerclesVisibles(Array.isArray(cercles) && cercles.length ? cercles : ['pas', 'kcal', 'som', 'eau']);
   }, []);
 
   useFocusEffect(useCallback(() => { charger(); }, [charger]));
@@ -147,22 +154,30 @@ export default function SanteScreen({ navigation }) {
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>
         <View style={styles.ringsGrid}>
-          <View style={styles.ringBox}>
-            <ProgressRing value={d.pas || 0} max={d.oP || 10000} color={PALETTE.blue} size={70} label={`${Math.round((d.pas || 0) / 1000)}k`} />
-            <Text style={styles.ringCaption}>Pas</Text>
-          </View>
-          <View style={styles.ringBox}>
-            <ProgressRing value={d.cal || 0} max={d.oCal || 2200} color={PALETTE.orange} size={70} label={`${d.cal || 0}`} />
-            <Text style={styles.ringCaption}>kcal</Text>
-          </View>
-          <View style={styles.ringBox}>
-            <ProgressRing value={d.som || 0} max={d.oSom || 8} color={PALETTE.violet} size={70} label={`${d.som || 0}h`} />
-            <Text style={styles.ringCaption}>Sommeil</Text>
-          </View>
-          <View style={styles.ringBox}>
-            <ProgressRing value={d.eau || 0} max={d.oEau || 2.5} color={PALETTE.teal} size={70} label={`${d.eau || 0}L`} />
-            <Text style={styles.ringCaption}>Eau</Text>
-          </View>
+          {cerclesVisibles.includes('pas') && (
+            <View style={styles.ringBox}>
+              <ProgressRing value={d.pas || 0} max={d.oP || 10000} color={PALETTE.blue} size={70} label={`${Math.round((d.pas || 0) / 1000)}k`} />
+              <Text style={styles.ringCaption}>Pas</Text>
+            </View>
+          )}
+          {cerclesVisibles.includes('kcal') && (
+            <View style={styles.ringBox}>
+              <ProgressRing value={d.cal || 0} max={d.oCal || 2200} color={PALETTE.orange} size={70} label={`${d.cal || 0}`} />
+              <Text style={styles.ringCaption}>kcal</Text>
+            </View>
+          )}
+          {cerclesVisibles.includes('som') && (
+            <View style={styles.ringBox}>
+              <ProgressRing value={d.som || 0} max={d.oSom || 8} color={PALETTE.violet} size={70} label={`${d.som || 0}h`} />
+              <Text style={styles.ringCaption}>Sommeil</Text>
+            </View>
+          )}
+          {cerclesVisibles.includes('eau') && (
+            <View style={styles.ringBox}>
+              <ProgressRing value={d.eau || 0} max={d.oEau || 2.5} color={PALETTE.teal} size={70} label={`${d.eau || 0}L`} />
+              <Text style={styles.ringCaption}>Eau</Text>
+            </View>
+          )}
         </View>
 
         {/* Ajout rapide d'eau — l'action la plus fréquente, en un geste */}

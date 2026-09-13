@@ -3,6 +3,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import { useFocusEffect } from '@react-navigation/native';
 import { BackButton, SectionLabel } from '../components/Shared';
 import { getRecettesDuJour } from '../utils/cuisineCaller';
+import { getFavoris, toggleFavori } from '../utils/cuisineFavoris';
 import { getAllApiKeys, getActiveAiProvider, AI_PROVIDERS } from '../utils/apiKeys';
 import { getData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
@@ -15,6 +16,7 @@ export default function CuisineScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [regenerationEnCours, setRegenerationEnCours] = useState(false);
   const [sourceIA, setSourceIA] = useState(null);
+  const [favorisState, setFavorisState] = useState({}); // LOT 78 — clé "type|titre" -> bool
 
   const charger = useCallback(async (forcerRegeneration = false) => {
     if (forcerRegeneration) setRegenerationEnCours(true);
@@ -28,6 +30,11 @@ export default function CuisineScreen({ navigation }) {
       const { recettes: r, source } = await getRecettesDuJour(appState, provider, keys || {}, forcerRegeneration);
       setRecettes(r || []);
       setSourceIA(source);
+      // LOT 78 — sait tout de suite quelles recettes du jour sont déjà en favoris
+      const favoris = await getFavoris();
+      const etat = {};
+      (r || []).forEach(recette => { etat[`${recette.type}|${recette.titre}`] = favoris.some(f => f.type === recette.type && f.titre === recette.titre); });
+      setFavorisState(etat);
     } catch (e) {
       console.warn('Erreur chargement recettes:', e);
     }
@@ -36,6 +43,12 @@ export default function CuisineScreen({ navigation }) {
   }, []);
 
   useFocusEffect(useCallback(() => { charger(); }, [charger]));
+
+  // LOT 78 — bascule favori depuis la vue détail ou la liste
+  const handleToggleFavori = async recette => {
+    const maintenantFavori = await toggleFavori(recette);
+    setFavorisState(prev => ({ ...prev, [`${recette.type}|${recette.titre}`]: maintenantFavori }));
+  };
 
   if (loading) {
     return (
@@ -59,6 +72,9 @@ export default function CuisineScreen({ navigation }) {
             {r.type && <Text style={styles.typeLabel}>{r.type.toUpperCase()}</Text>}
             <Text style={styles.headerTitle} numberOfLines={1}>{r.titre}</Text>
           </View>
+          <TouchableOpacity onPress={() => handleToggleFavori(r)} style={styles.favBtn}>
+            <Text style={{ fontSize: 20 }}>{favorisState[`${r.type}|${r.titre}`] ? '⭐' : '☆'}</Text>
+          </TouchableOpacity>
         </View>
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
           <View style={styles.metaRow}>
@@ -105,6 +121,9 @@ export default function CuisineScreen({ navigation }) {
       <View style={[styles.header, { borderColor: theme.border }]}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>🍽 Cuisine du jour</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('CuisineFavoris')} style={styles.favBtn}>
+          <Text style={{ fontSize: 13 }}>⭐ Mes favoris</Text>
+        </TouchableOpacity>
       </View>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         {sourceIA === 'ia' && (
@@ -124,7 +143,9 @@ export default function CuisineScreen({ navigation }) {
                 {r.type && <Text style={styles.typeLabelSmall}>{r.type.toUpperCase()}</Text>}
                 <Text style={styles.recetteTitre}>{r.titre}</Text>
               </View>
-              <Text style={{ color: '#666', fontSize: 10 }}>→</Text>
+              <TouchableOpacity onPress={() => handleToggleFavori(r)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={{ fontSize: 16 }}>{favorisState[`${r.type}|${r.titre}`] ? '⭐' : '☆'}</Text>
+              </TouchableOpacity>
             </View>
             <View style={styles.recetteMeta}>
               <Text style={[styles.metaTag, { color: PALETTE.teal }]}>⏱ {r.temps}</Text>
@@ -170,4 +191,5 @@ const styles = StyleSheet.create({
   recetteMeta: { flexDirection: 'row', gap: 12 },
   metaTag: { fontSize: 11 },
   refreshBtn: { marginTop: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center' },
+  favBtn: { paddingHorizontal: 8, paddingVertical: 4 },
 });

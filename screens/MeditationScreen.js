@@ -1,12 +1,13 @@
 // ═══════════════════════════════════════════
-//  MEDITATIONSCREEN.JS — Module Méditation (lot 71)
+//  MEDITATIONSCREEN.JS — Module Méditation (lot 71, guide vocal lot 81)
 //  Repris du prototype web (ModMeditation), jamais porté jusqu'ici.
-//  5 séances guidées (texte, pas d'audio pour l'instant — voir note de
-//  fin de fichier), minuteur simple, suivi du temps total médité.
+//  5 séances guidées (texte + voix en option via expo-speech), minuteur
+//  simple, suivi du temps total médité.
 // ═══════════════════════════════════════════
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { arreterVoixKira, parlerAvecVoixKira } from '../utils/kiraVoix'; // LOT 82
 import { useFocusEffect } from '@react-navigation/native';
 import { BackButton, ProgressRing, SectionLabel } from '../components/Shared';
 import { PALETTE } from '../utils/theme';
@@ -15,6 +16,7 @@ import { getData, setData } from '../utils/storage';
 import { programmerNotificationDansSecondes, annulerNotifications } from '../utils/notifications';
 
 const CLE_HISTORIQUE = 'meditation_historique';
+const CLE_VOIX = 'meditation_voix_activee'; // LOT 81
 
 const SEANCES = [
   { id: 'pleine_conscience', nom: 'Pleine conscience', minutes: 5, icon: '🧘', couleur: PALETTE.violet, desc: 'Focus sur la respiration', guide: "Ferme les yeux. Inspire lentement sur 4 temps, retiens 2 temps, expire sur 6 temps. Reviens à ta respiration à chaque fois que ton esprit s'échappe — c'est normal, ce n'est pas un échec." },
@@ -36,6 +38,7 @@ export default function MeditationScreen({ navigation }) {
   const [secondesRestantes, setSecondesRestantes] = useState(0);
   const [running, setRunning] = useState(false);
   const [stats, setStats] = useState({ totalMinutes: 0, seancesCount: 0 });
+  const [voixActivee, setVoixActivee] = useState(false); // LOT 81
   const intervalRef = useRef(null);
   const notifIdRef = useRef(null);
 
@@ -46,7 +49,10 @@ export default function MeditationScreen({ navigation }) {
   }, []);
 
   useFocusEffect(useCallback(() => { chargerStats(); }, [chargerStats]));
-  useEffect(() => () => clearInterval(intervalRef.current), []);
+  useFocusEffect(useCallback(() => {
+    getData(CLE_VOIX).then(v => setVoixActivee(!!v));
+  }, []));
+  useEffect(() => () => { clearInterval(intervalRef.current); arreterVoixKira(); }, []);
 
   const ouvrirSeance = seance => {
     stopper();
@@ -61,6 +67,13 @@ export default function MeditationScreen({ navigation }) {
 
   const demarrer = async () => {
     setRunning(true);
+    // LOT 81 — lit le guide à voix haute au démarrage, si l'option est activée.
+    // Débit un peu plus lent (0.92) qu'une lecture normale, plus adapté à la
+    // méditation qu'au débit du briefing matinal.
+    if (voixActivee) {
+      arreterVoixKira();
+      parlerAvecVoixKira(seanceOuverte.guide);
+    }
     const id = await programmerNotificationDansSecondes(
       `🧘 ${seanceOuverte.nom} terminée`,
       'Prends un instant avant de reprendre ta journée.',
@@ -82,12 +95,14 @@ export default function MeditationScreen({ navigation }) {
 
   const pauser = () => {
     setRunning(false);
+    arreterVoixKira(); // LOT 81/82
     clearInterval(intervalRef.current);
     if (notifIdRef.current) { annulerNotifications(notifIdRef.current).catch(() => {}); notifIdRef.current = null; }
   };
 
   const stopper = () => {
     setRunning(false);
+    arreterVoixKira(); // LOT 81/82
     clearInterval(intervalRef.current);
     if (notifIdRef.current) { annulerNotifications(notifIdRef.current).catch(() => {}); notifIdRef.current = null; }
   };
@@ -95,6 +110,7 @@ export default function MeditationScreen({ navigation }) {
   const terminerSeance = async () => {
     setRunning(false);
     notifIdRef.current = null;
+    if (voixActivee) parlerAvecVoixKira('Séance terminée. Prends un instant avant de reprendre ta journée.'); // LOT 81/82
     const historique = (await getData(CLE_HISTORIQUE)) || [];
     const misAJour = [...historique, { id: Date.now(), seance: seanceOuverte.id, minutes: seanceOuverte.minutes, date: new Date().toISOString() }].slice(-200);
     await setData(CLE_HISTORIQUE, misAJour);
@@ -110,6 +126,17 @@ export default function MeditationScreen({ navigation }) {
         <View style={[styles.header, { borderColor: theme.border }]}>
           <BackButton onPress={fermerSeance} />
           <Text style={styles.headerTitle} numberOfLines={1}>{s.icon} {s.nom}</Text>
+          <TouchableOpacity
+            onPress={async () => {
+              const nouvelleValeur = !voixActivee;
+              setVoixActivee(nouvelleValeur);
+              await setData(CLE_VOIX, nouvelleValeur);
+              if (!nouvelleValeur) arreterVoixKira();
+            }}
+            style={styles.voixBtn}
+          >
+            <Text style={{ fontSize: 18 }}>{voixActivee ? '🔊' : '🔇'}</Text>
+          </TouchableOpacity>
         </View>
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.ringWrap}>
@@ -122,6 +149,9 @@ export default function MeditationScreen({ navigation }) {
           <View style={[styles.guideBox, { borderColor: s.couleur + '30', backgroundColor: s.couleur + '0d' }]}>
             <Text style={[styles.guideLabel, { color: s.couleur }]}>Guide</Text>
             <Text style={styles.guideText}>{s.guide}</Text>
+            <TouchableOpacity onPress={() => parlerAvecVoixKira(s.guide)} style={styles.reecouterBtn}>
+              <Text style={{ color: s.couleur, fontSize: 12, fontWeight: '600' }}>🔊 Réécouter le guide</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </View>
@@ -162,8 +192,7 @@ export default function MeditationScreen({ navigation }) {
         ))}
 
         <Text style={styles.infoSmall}>
-          💡 Les séances sont guidées par texte pour l'instant — un guide audio/voix pourra
-          être ajouté dans une prochaine étape.
+          💡 Ouvre une séance et appuie sur 🔇/🔊 en haut à droite pour activer le guide vocal.
         </Text>
       </ScrollView>
     </View>
@@ -180,6 +209,8 @@ const styles = StyleSheet.create({
   guideBox: { borderRadius: 14, padding: 16, borderWidth: 1, width: '100%' },
   guideLabel: { fontSize: 11, fontWeight: '700', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.8 },
   guideText: { fontSize: 13, color: '#ddd', lineHeight: 21 },
+  reecouterBtn: { marginTop: 12, alignSelf: 'flex-start' },
+  voixBtn: { paddingHorizontal: 8, paddingVertical: 4 },
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
   statBox: { flex: 1, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 13, alignItems: 'center' },
   statValue: { fontSize: 20, fontWeight: '800', color: '#fff' },

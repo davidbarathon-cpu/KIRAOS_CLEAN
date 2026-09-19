@@ -7,12 +7,22 @@
 // ═══════════════════════════════════════════
 
 import { useCallback, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { BackButton, SectionLabel } from '../components/Shared';
 import { getFavoris, retirerFavori } from '../utils/cuisineFavoris';
 import { PALETTE } from '../utils/theme';
 import { useKiraTheme } from '../utils/useTheme';
+
+// LOT 88 — construit un texte lisible pour le partage natif (WhatsApp, SMS,
+// mail...), même esprit que l'export PDF santé/guitare existant mais sans
+// fichier, juste du texte brut, plus simple à envoyer rapidement.
+function partagerRecette(r) {
+  const ingredients = (r.ingredients || []).map(i => `• ${i}`).join('\n');
+  const etapes = (r.etapes || []).map((e, i) => `${i + 1}. ${e}`).join('\n');
+  const message = `🍽 ${r.titre}${r.type ? ` (${r.type})` : ''}\n⏱ ${r.temps || '?'} · 📊 ${r.difficulte || '?'}\n\nIngrédients :\n${ingredients}\n\nPréparation :\n${etapes}${r.conseil ? `\n\n🌟 Conseil : ${r.conseil}` : ''}\n\n— Partagé depuis Kira OS`;
+  Share.share({ message });
+}
 
 export default function CuisineFavorisScreen({ navigation }) {
   const theme = useKiraTheme();
@@ -53,6 +63,9 @@ export default function CuisineFavorisScreen({ navigation }) {
             {r.type && <Text style={styles.typeLabel}>{r.type.toUpperCase()}</Text>}
             <Text style={styles.headerTitle} numberOfLines={1}>{r.titre}</Text>
           </View>
+          <TouchableOpacity onPress={() => partagerRecette(r)} style={styles.favBtn}>
+            <Text style={{ fontSize: 18 }}>📤</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => confirmerSuppression(r)} style={styles.favBtn}>
             <Text style={{ fontSize: 20 }}>⭐</Text>
           </TouchableOpacity>

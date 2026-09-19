@@ -17,7 +17,7 @@ import {
   TextInput, TouchableOpacity,
   View,
 } from 'react-native';
-import * as Speech from 'expo-speech';
+import { arreterVoixKira, parlerAvecVoixKira } from '../utils/kiraVoix'; // LOT 82
 import KiraIcon from '../components/KiraIcon';
 import { demanderAKira } from '../utils/aiCaller';
 import { AI_PROVIDERS, getActiveAiProvider, getActiveKiraIcon, getAllApiKeys } from '../utils/apiKeys';
@@ -25,7 +25,9 @@ import { detecterDemandeGeoKira, genererReponseGeoKira } from '../utils/geoKiraB
 import { estConnecteAGoogle } from '../utils/googleAuth';
 import { creerEvenementGoogle, supprimerEvenementGoogle } from '../utils/googleCalendar';
 import { analyzeContext } from '../utils/kiraBrain';
-import { detecterAjoutCourse, detecterAjoutNote, detecterCreationEvenement, detecterDemandeActualites, detecterDemandeBriefing, detecterDemandeTraduction, detecterMemorisation, detecterOubliMemoire, detecterSuppressionEvenement, detecterNotationHumeur, detecterAjoutObjectif, detecterAjoutDepense, detecterDemandeBilanHebdo } from '../utils/kiraIntents';
+import { detecterAjoutCourse, detecterAjoutNote, detecterCreationEvenement, detecterDemandeActualites, detecterDemandeBriefing, detecterDemandeTraduction, detecterMemorisation, detecterOubliMemoire, detecterSuppressionEvenement, detecterNotationHumeur, detecterAjoutObjectif, detecterAjoutDepense, detecterDemandeBilanHebdo, detecterLancementMinuteur, detecterCommandeDomotique } from '../utils/kiraIntents';
+import { listerTousLesAppareils, getDriver } from '../utils/domotiqueDrivers'; // LOT 85
+import { programmerNotificationDansSecondes } from '../utils/notifications'; // LOT 85
 import { genererBilanHebdomadaire } from '../utils/kiraBilanHebdo'; // LOT 76
 import { genererTexteBriefing } from '../utils/kiraBriefing';
 import { getResumeActivitePourBriefing } from '../utils/kiraActiviteRecente'; // LOT 74
@@ -88,7 +90,7 @@ export default function KiraChatScreen({ navigation }) {
   // Coupe immédiatement la voix de Kira si l'utilisateur quitte l'écran
   // pendant qu'elle parle — sinon la lecture continuerait en arrière-plan.
   useEffect(() => {
-    return () => { Speech.stop(); };
+    return () => { arreterVoixKira(); };
   }, []);
 
   /**
@@ -105,18 +107,15 @@ export default function KiraChatScreen({ navigation }) {
       .slice(0, 600);
     if (!texteNettoye.trim()) return;
 
-    Speech.stop();
+    arreterVoixKira();
     setKiraEnTrainDeParler(true);
-    Speech.speak(texteNettoye, {
-      language: 'fr-FR',
-      onDone: () => setKiraEnTrainDeParler(false),
-      onStopped: () => setKiraEnTrainDeParler(false),
-      onError: () => setKiraEnTrainDeParler(false),
+    parlerAvecVoixKira(texteNettoye, {
+      onFin: () => setKiraEnTrainDeParler(false),
     });
   };
 
   const arreterLaVoix = () => {
-    Speech.stop();
+    arreterVoixKira();
     setKiraEnTrainDeParler(false);
   };
 
@@ -360,6 +359,60 @@ export default function KiraChatScreen({ navigation }) {
     if (detecterDemandeBilanHebdo(msg)) {
       const texteBilan = await genererBilanHebdomadaire();
       const withReply = [...withUser, { r: 'ai', t: texteBilan }];
+      await persistChat(withReply);
+      setLoading(false);
+      return;
+    }
+
+    // ── LOT 85 — Lancement d'un minuteur depuis le chat ──
+    // Vérifiée avant la domotique : les deux sont de simples commandes
+    // d'action, mais "minuteur"/"timer" ne recoupe aucun mot-clé domotique.
+    const minuteurDemande = detecterLancementMinuteur(msg);
+    if (minuteurDemande) {
+      const { secondes, label } = minuteurDemande;
+      const minutes = Math.floor(secondes / 60);
+      const secRestantes = secondes % 60;
+      const dureeLisible = [minutes > 0 ? `${minutes} min` : null, secRestantes > 0 ? `${secRestantes} s` : null].filter(Boolean).join(' ');
+      await programmerNotificationDansSecondes(
+        '⏱️ Minuteur terminé !',
+        label ? `C'est prêt : ${label}` : "Ton minuteur est arrivé à zéro.",
+        secondes
+      );
+      const reponse = `⏱️ C'est parti pour ${dureeLisible}${label ? ` (${label})` : ''} ! Je te préviens dès que c'est terminé.`;
+      const withReply = [...withUser, { r: 'ai', t: reponse }];
+      await persistChat(withReply);
+      setLoading(false);
+      return;
+    }
+
+    // ── LOT 85 — Commande domotique depuis le chat (allumer/éteindre) ──
+    const commandeDomotique = detecterCommandeDomotique(msg);
+    if (commandeDomotique) {
+      const driversActifs = (await getData('domotique_drivers_actifs')) || ['demo'];
+      const appareils = await listerTousLesAppareils(driversActifs);
+      // Recherche approximative : le nom de l'appareil doit contenir (ou être
+      // contenu dans) le texte extrait du message, comparaison insensible à
+      // la casse — cohérent avec le reste de l'app (voir CoursesScreen lot 77).
+      const cible = appareils.find(a => {
+        const nom = a.nom.toLowerCase();
+        return nom.includes(commandeDomotique.recherche) || commandeDomotique.recherche.includes(nom);
+      });
+
+      let reponse;
+      if (!cible) {
+        reponse = appareils.length === 0
+          ? "🏠 Je ne trouve aucun appareil domotique configuré — active un driver dans le module Domotique d'abord."
+          : `🏠 Je n'ai pas trouvé d'appareil correspondant à "${commandeDomotique.recherche}". Les appareils que je connais : ${appareils.map(a => a.nom).join(', ')}.`;
+      } else {
+        const driver = getDriver(cible.driverId);
+        const resultatAction = commandeDomotique.action === 'allumer' ? await driver.allumer(cible.id) : await driver.eteindre(cible.id);
+        if (resultatAction.succes) {
+          reponse = commandeDomotique.action === 'allumer' ? `💡 "${cible.nom}" allumé(e) !` : `🌙 "${cible.nom}" éteint(e) !`;
+        } else {
+          reponse = `⚠️ Je n'ai pas réussi à agir sur "${cible.nom}" : ${resultatAction.erreur || 'erreur inconnue'}.`;
+        }
+      }
+      const withReply = [...withUser, { r: 'ai', t: reponse }];
       await persistChat(withReply);
       setLoading(false);
       return;

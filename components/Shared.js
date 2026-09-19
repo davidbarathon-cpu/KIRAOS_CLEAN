@@ -126,16 +126,18 @@ export function Toggle({ value, onChange, color = PALETTE.purple }) {
 // ── Carte de module (sur l'écran d'accueil) ──
 // IMPORTANT : largeur fixée en % (et non flex:1) pour fonctionner
 // correctement à l'intérieur d'un conteneur flexWrap.
-export function ModuleCard({ icon, label, desc, color, onPress, theme }) {
+export function ModuleCard({ icon, label, desc, color, onPress, onLongPress, epingle, theme }) {
   return (
     <TouchableOpacity
       activeOpacity={0.85}
       onPress={onPress}
+      onLongPress={onLongPress}
       style={[
         styles.moduleCard,
         { backgroundColor: theme.surface, borderColor: color + '22' },
       ]}
     >
+      {epingle && <Text style={styles.moduleEpingleBadge}>⭐</Text>}
       <View style={styles.moduleIconSlot}>
         <PremiumIcon size={42} color={color} emoji={icon} emojiSize={19} />
       </View>
@@ -244,6 +246,12 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     minHeight: 92,
+  },
+  moduleEpingleBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 10,
+    fontSize: 12,
   },
   moduleIconSlot: {
     marginBottom: 10,

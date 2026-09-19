@@ -1374,6 +1374,289 @@ propose autre chose. Réfléchir à la structure de données (probablement une c
 `cuisine_favoris` avec les recettes complètes sauvegardées, pas juste des ids, puisque les
 recettes générées par IA changent chaque jour et ne sont pas ré-consultables sinon).
 
+## ✅ Lot 79 — Correctif : cercles santé pas synchronisés sur l'écran d'accueil
+
+David a signalé qu'en décochant un cercle (ex. Eau) dans Paramètres, il disparaissait bien de
+l'écran Santé mais pas du widget de l'écran d'accueil (`screens/HomeScreen.js`), qui a sa
+**propre** rangée de 4 anneaux (dupliquée, pas de composant partagé). Corrigé : `HomeScreen.js`
+relit maintenant aussi `sante_cercles_visibles` (même clé que Santé/Paramètres) et filtre sa
+rangée d'anneaux en conséquence. Aucune nouvelle dépendance.
+
+## ✅ Lot 80 — Driver Home Assistant (bascule automatique local/distant)
+
+David a confirmé son serveur Home Assistant installé et accessible en Wi-Fi maison, ET a
+besoin d'y accéder aussi depuis l'extérieur. Plutôt que de choisir une seule adresse, le
+driver gère **les deux** : il essaie d'abord l'adresse locale (rapide, `/api/` avec délai de
+2,5s), et retombe automatiquement sur l'adresse distante (Nabu Casa ou accès perso) si la
+locale ne répond pas — invisible pour David au quotidien.
+
+**Nouveau fichier** `utils/driverHomeAssistant.js` : respecte l'interface commune posée au
+lot 14 (`estConfigure/listerAppareils/allumer/eteindre/reglerValeur`), donc **aucune
+modification de `DomotiqueScreen.js`** n'a été nécessaire — exactement comme prévu dans la
+note actée plus haut. V1 gère les domaines Home Assistant `light`, `switch`, `fan`, `cover`
+(les plus courants) ; `climate`/`media_player` pourront s'ajouter plus tard sans rien casser.
+Réglage de luminosité (`light`) et position de volet (`cover`) en pourcentage 0-100 via les
+services HA natifs (`brightness_pct`, `set_cover_position`) — plus simple qu'avec Hue (pas de
+conversion d'échelle nécessaire).
+
+**`utils/domotiqueDrivers.js`** : driver ajouté au registre `DRIVERS_DISPONIBLES`.
+
+**`screens/ParametresScreen.js`** : nouveau bloc de configuration (3 champs : URL locale, URL
+distante optionnelle, jeton d'accès longue durée), même style visuel que le bloc Tuya
+au-dessus. David doit ensuite activer "Home Assistant" dans Domotique → Écosystèmes
+disponibles pour voir ses appareils apparaître.
+
+Pur JavaScript, aucune nouvelle dépendance native, pas de rebuild nécessaire (juste `eas
+update` ou même un simple redémarrage de l'app en dev).
+
+## ✅ Lot 81 — Trois évolutions (scène d'arrivée, guide vocal, sélecteur de fichier)
+
+**🏠 Scène d'arrivée automatique via Home Assistant** : rien à coder — la fonctionnalité
+existe déjà depuis le lot 57 (`declencherSceneArrivee()` dans `geofencingTask.js`), pilote
+n'importe quel driver via l'interface commune. Avec le driver Home Assistant ajouté au lot 80,
+les appareils HA sont automatiquement sélectionnables dans la carte "Géo-Kira" de Paramètres
+dès que David active le driver "Home Assistant" dans Domotique — aucune modification de code
+nécessaire, juste de la configuration côté David.
+
+**🎙️ Guide vocal pour la Méditation** (`screens/MeditationScreen.js`) : utilise `expo-speech`
+(déjà une dépendance du projet, utilisée pour le Kira-Podcast du lot 48 — donc **aucun rebuild
+natif nécessaire**). Bouton 🔊/🔇 dans le header de la vue détail d'une séance (préférence
+sauvegardée sous `meditation_voix_activee`) ; si activé, le guide est lu à voix haute au
+démarrage (débit ralenti, `rate: 0.92`, plus adapté à la méditation que le débit du briefing) ;
+phrase de clôture également lue à la fin de la séance. Bouton "🔊 Réécouter le guide" sous le
+texte, disponible à tout moment indépendamment du réglage.
+
+**📂 Sélecteur de fichier pour l'import de sauvegarde** (`screens/ParametresScreen.js`) :
+nouveau bouton "📂 Choisir un fichier" au-dessus de la zone de texte d'import existante — ouvre
+le sélecteur natif (`expo-document-picker`, nouvelle dépendance ajoutée à `package.json`),
+lit le contenu du fichier choisi via `new File(uri).text()` (API moderne d'`expo-file-system`,
+déjà utilisée ailleurs dans le projet — `emailSender.js`, `plantAnalyzer.js`), et pré-remplit
+le champ existant. Toute la logique de validation/confirmation/restauration
+(`importerDonneesJSON`) est réutilisée telle quelle. **Nécessite un `npx expo prebuild` puis
+un rebuild natif** (nouvelle dépendance) — le copier-coller manuel reste possible en secours
+si le fichier ne peut pas être sélectionné pour une raison ou une autre.
+
+## ✅ Lot 82 — Voix naturelle de Kira (Gemini TTS)
+
+David trouvait la voix de Kira "robotique" (voix système Android par défaut, utilisée partout
+via `expo-speech`) et voulait quelque chose "comme la voix de Gemini". Bonne nouvelle : c'est
+littéralement possible — Gemini a son propre modèle de génération audio
+(`gemini-3.1-flash-tts-preview`, 30 voix au catalogue), et Kira propose déjà Gemini comme
+fournisseur d'IA (`utils/apiKeys.js`) — donc si une clé Gemini est déjà configurée pour le
+cerveau de Kira, on peut réutiliser cette même clé pour sa voix, sans rien demander de plus.
+
+**Nouveau fichier `utils/kiraVoix.js`** — module central qui remplace tous les appels directs à
+`expo-speech` dans l'app :
+- `parlerAvecVoixKira(texte, {onDebut, onFin})` : appelle Gemini TTS si une clé est configurée
+  (réponse en PCM brut base64 → reconstruction manuelle d'un en-tête WAV 44 octets → écriture
+  dans le cache via `expo-file-system` → lecture via `expo-audio` avec `createAudioPlayer`) ;
+  **repli automatique et invisible sur `expo-speech`** si pas de clé Gemini, ou si l'appel
+  réseau échoue pour une raison quelconque (jamais de régression, Kira ne reste jamais muette).
+- `arreterVoixKira()` : stoppe la lecture en cours, qu'elle vienne de Gemini ou d'expo-speech.
+- `getVoixGeminiChoisie()`/`setVoixGeminiChoisie()` : préférence de voix (clé
+  `kira_voix_gemini_nom`), 6 voix proposées parmi les 30 du catalogue Gemini (les plus adaptées
+  à un ton d'assistant chaleureux) — défaut "Sulafat" (chaleureuse).
+
+**Fichiers mis à jour pour utiliser ce module** (remplacement de `Speech.speak`/`Speech.stop`
+directs) : `utils/kiraBriefing.js` (Kira-Podcast), `screens/KiraChatScreen.js` (réponses du
+chat), `screens/MeditationScreen.js` (guide vocal du lot 81), `screens/EcouteRapideScreen.js`.
+
+**`screens/ParametresScreen.js`** : nouvelle section "🔊 Voix de Kira" (dans Paramètres → IA),
+sélecteur des 6 voix disponibles si une clé Gemini est configurée, sinon message invitant à en
+ajouter une pour débloquer la voix naturelle.
+
+**Aucune nouvelle dépendance** — `expo-audio`, `expo-file-system` et `expo-speech` sont déjà
+toutes les trois installées. **Pas de rebuild natif nécessaire**, un simple `eas update` suffit.
+
+Point de vigilance à garder en tête : la génération Gemini ajoute un aller-retour réseau
+(1-2 secondes environ) avant que Kira commence à parler, contrairement à la voix système qui
+démarre instantanément. Compromis assumé pour la qualité de la voix — à surveiller si David
+trouve le délai gênant, notamment sur le guide de Méditation où la lecture démarre pile au
+lancement de la séance.
+
+## ✅ Lot 83 — Scène de départ (symétrique de la scène d'arrivée)
+
+Suite logique après le driver Home Assistant (lot 80) : Géo-Kira détectait déjà les sorties de
+zone domicile (`eventType === 2`, utilisé depuis le lot 54 pour l'historique et pour annuler
+une notification d'arrivée en cas de simple passage), mais ne déclenchait jamais rien à la
+sortie. Ajout d'une scène de départ, miroir exact de la scène d'arrivée du lot 57.
+
+**`utils/geoKira.js`** : nouvelles clés/fonctions `getSceneDepart`/`setSceneDepart` (liste
+d'appareils séparée de celle d'arrivée — utile si David veut, par ex., tout éteindre en
+partant mais ne rallumer que certaines lumières en arrivant),
+`getSceneActiveDepart`/`setSceneActiveDepart` (opt-in, même principe de sécurité qu'au lot 65),
+`peutDeclencherSceneDepart`/`marquerSceneDeclencheeDepart` (cooldown dédié, `10 min` —
+volontairement plus court que les 30 min de l'arrivée : une sortie de zone est un événement
+plus net, moins sujet aux faux positifs qu'un simple passage devant chez soi).
+
+**`utils/geofencingTask.js`** : nouvelle fonction `declencherSceneDepart()` (appelle
+`driver.eteindre(id)` pour chaque appareil coché), appelée dans la branche `estSortie`.
+
+**`components/GeoKiraCard.js`** : section "🚪 Scène de départ" ajoutée sous celle d'arrivée,
+même structure (liste d'appareils à cocher + interrupteur dédié).
+
+**Point de vigilance assumé, pas de garde-fou supplémentaire codé** : contrairement à la
+notification d'arrivée (lot 65, délai de confirmation de 2 min avant affichage, annulable),
+la scène de départ se déclenche immédiatement à la détection de sortie — l'architecture par
+notification programmée qui permet ce délai pour l'arrivée ne peut pas se transposer
+simplement à une action silencieuse comme éteindre un appareil (pas de mécanisme fiable pour
+exécuter du code différé dans une tâche de fond qu'Android peut tuer entre-temps). Le risque
+concret : sortir brièvement dans le jardin ou jusqu'à la boîte aux lettres pourrait éteindre
+les lumières si le rayon choisi est trop juste. Le texte d'aide dans l'app recommande à David
+de vérifier que son rayon couvre bien toute la maison. Aucune nouvelle dépendance, pas de
+rebuild nécessaire.
+
+## ✅ Lot 84 — Home Assistant : support des thermostats/radiateurs (`climate`)
+
+Extension naturelle après la scène de départ (lot 83) : pouvoir couper le chauffage en
+partant, pas seulement les lumières. Bonne surprise en regardant le code : l'écran Domotique
+(`DomotiqueScreen.js`) anticipait déjà un type `'thermostat'` (icône 🌡️, affichage en °C) —
+jamais utilisé jusqu'ici faute de driver le fournissant.
+
+**`utils/driverHomeAssistant.js`** : domaine Home Assistant `climate` ajouté à
+`DOMAINES_GERES`. Particularités gérées : les thermostats n'utilisent pas des états "on"/"off"
+mais des modes (`heat`, `cool`, `auto`, `heat_cool`, `dry`, `fan_only`...) — tout ce qui n'est
+pas explicitement `"off"` est considéré comme allumé ; la valeur affichée est la température
+mesurée (`current_temperature`) ou, à défaut, la consigne visée (`temperature`).
+
+**Volontairement pas de réglage de consigne** (augmenter/diminuer la température) : l'écran
+Domotique n'a qu'un simple interrupteur on/off pour l'instant, pas de curseur — ajouter un vrai
+réglage de température viendrait avec sa propre UI (curseur ou +/-) à concevoir, laissé pour
+une prochaine fois si David en a l'usage. Pour l'instant, un thermostat Home Assistant peut
+être allumé/éteint comme n'importe quel autre appareil — donc utilisable tel quel dans les
+scènes d'arrivée/départ (lot 83).
+
+Aucune modification de `DomotiqueScreen.js` nécessaire (l'interface générique gère déjà le
+type `thermostat`). Aucune nouvelle dépendance, pas de rebuild.
+
+## ✅ Lot 85 — Cinq améliorations d'ergonomie ("un vrai assistant facile à utiliser")
+
+David a demandé des idées pour que Kira devienne "un vrai assistant personnel au quotidien,
+facile à utiliser" — 5 pistes proposées, toutes actées et livrées ensemble.
+
+**🔍 Recherche sur l'écran d'accueil** (`screens/HomeScreen.js`) : barre de recherche en haut
+du contenu, filtre en direct les modules par nom/description (insensible aux accents/casse).
+Pendant une recherche, remplace tout le reste de l'écran par les résultats correspondants.
+
+**📌 Modules épinglés** (`screens/HomeScreen.js`, `components/Shared.js`) : appui long sur
+n'importe quelle carte de module → l'épingle dans une nouvelle section "⭐ Favoris" tout en
+haut de l'accueil (max 6, au-delà ça perd son intérêt). `ModuleCard` accepte maintenant
+`onLongPress` et `epingle` (badge ⭐ visuel) en props optionnelles — rien de cassé pour les
+usages existants du composant. Stocké sous `modules_epingles`.
+
+**💬 Kira agit sur le Minuteur et la Domotique depuis le chat** (`utils/kiraIntents.js`,
+`screens/KiraChatScreen.js`) : deux nouvelles fonctions de détection, même architecture que le
+lot 76 (mots-clés + regex, pas de vraie NLP). `detecterLancementMinuteur` ("lance un minuteur
+de 10 minutes pour les pâtes") programme une vraie notification différée
+(`programmerNotificationDansSecondes`, déjà utilisée par la Méditation), donc ça marche même
+si David quitte le chat. `detecterCommandeDomotique` ("éteins le salon") fait un matching
+approximatif du nom d'appareil parmi tous les drivers actifs.
+
+**⚡ 3 raccourcis Android supplémentaires** (`App.js`) : Android en autorise 4 au total, un
+seul était utilisé ("Parler à Kira"). Ajout de "Ajouter une course", "Agenda du jour",
+"Nouvelle note" — ce dernier ouvre directement le formulaire de saisie grâce à un nouveau
+paramètre `route.params.ouvrirAjout` sur `NotesScreen.js` (au lieu de juste afficher la
+liste). **Les icônes natives correspondantes restent à préparer** (voir le guide d'installation
+existant pour "kira_mic") : `kira_course`, `kira_agenda`, `kira_note`.
+
+**🆕 Écran "Nouveautés"** (`utils/nouveautes.js`, `screens/NouveautesScreen.js`) : petit journal
+des fonctionnalités ajoutées récemment (lots 77 à 85 pour l'instant), accessible via un nouveau
+bouton dans le header de l'accueil (à côté de l'icône Paramètres), avec un petit point rose
+tant que David n'a pas ouvert l'écran depuis la dernière nouveauté. **Maintenance à prévoir** :
+ajouter une entrée en haut du tableau `NOUVEAUTES` à chaque lot qui ajoute quelque chose de
+visible pour l'utilisateur (pas les corrections de bugs internes) — instruction laissée en
+commentaire en tête du fichier pour ne pas l'oublier dans une future session.
+
+Aucune nouvelle dépendance sur l'ensemble du lot, pas de rebuild nécessaire — un `eas update`
+suffit pour tout.
+
+## ✅ Lot 86 — Correctif : les icônes des raccourcis rapides n'existaient pas réellement
+
+En relisant le lot 85, j'ai réalisé une erreur : les notes de livraison renvoyaient vers "le
+guide d'installation existant pour kira_mic" — **ce guide n'a jamais existé**. Le commentaire
+dans `App.js` ("voir le guide d'installation...") était un vœu jamais concrétisé depuis que le
+raccourci "Parler à Kira" a été créé ; `app.json` ne contenait aucune configuration
+`androidIcons` pour le plugin `expo-quick-actions`. En pratique, les 4 raccourcis
+fonctionnaient mais Android affichait une icône générique par défaut à leur place.
+
+**Corrigé proprement cette fois** :
+- 4 icônes générées (`assets/shortcut_micro.png`, `shortcut_course.png`, `shortcut_agenda.png`,
+  `shortcut_note.png`) — pictogrammes blancs simples sur fond transparent (micro, panier,
+  calendrier, note à coin plié), respectant les recommandations Android pour les icônes
+  adaptatives (foreground + backgroundColor séparés).
+- `app.json` : bloc `androidIcons` ajouté à la config du plugin `expo-quick-actions`,
+  reliant chaque id d'icône (`kira_mic`, `kira_course`, `kira_agenda`, `kira_note`) à son image
+  et une couleur de fond distincte piochée dans `PALETTE` (violet, teal, bleu, jaune).
+- `App.js` : commentaires corrigés pour refléter la réalité.
+
+**Nécessite un `npx expo prebuild` puis un rebuild natif** (le plugin ne génère les vraies
+ressources Android qu'à ce moment-là) — sans ce rebuild, rien ne change visuellement (les 4
+raccourcis continueront de fonctionner avec l'icône par défaut jusque-là, aucune régression).
+
+## ✅ Lot 87 — Résumé du soir, sauvegarde automatique, rappels d'habitudes
+
+Suite de la demande "d'autres idées d'évolution" — 3 des 5 pistes proposées.
+
+**🌙 Résumé du soir** (`utils/kiraBriefing.js`, `screens/HomeScreen.js`) : le bouton 🎙️ de
+l'accueil devient 🌙 après 18h et lit un résumé de fin de journée au lieu du briefing matinal —
+un seul point d'entrée qui s'adapte à l'heure plutôt qu'un deuxième bouton. **Ajustement
+important** : ne mentionne PAS l'agenda du lendemain — le modèle de données de l'Agenda
+(`utils/googleCalendar.js`) ne garde qu'une heure par événement, aucune date ; ajouter cette
+notion serait un chantier à part (toucher le stockage local + la conversion Google + la
+création d'événement). Le résumé se concentre donc sur le bilan de la journée écoulée :
+méditation faite ou non, objectifs en cours, sessions Pomodoro, eau bue, humeur notée — toutes
+des données déjà collectées par `utils/kiraActiviteRecente.js` (lot 74) pour le briefing matin.
+
+**💾 Sauvegarde automatique périodique** (`utils/dataBackup.js`, `App.js`,
+`screens/ParametresScreen.js`) : une sauvegarde JSON silencieuse (pas de partage natif, juste
+un fichier local) a lieu une fois par semaine au démarrage de l'app, avec rotation (3
+conservées, `documentDirectory/sauvegardes_auto/`). Date de la dernière affichée dans
+Paramètres → Sécurité. Vient s'ajouter à l'export manuel existant, ne le remplace pas.
+
+**🔔 Rappels d'habitudes** (nouveau fichier `utils/kiraRappelsHabitudes.js`) : détecte quand le
+poids, la guitare/chant ou la méditation n'ont pas été pratiqués depuis un moment (seuils : 8
+jours pour le poids, 14 jours pour guitare et méditation) et ajoute un rappel discret à la
+liste "🌟 Kira suggère" de l'accueil — un seul à la fois, jamais culpabilisant ("ça fait X
+jours que...", jamais "tu ne fais pas assez"). Le bouton d'action navigue maintenant vers
+l'écran concerné (avant, il ne faisait que masquer la suggestion).
+
+## ✅ Lot 88 — Partage rapide et thème automatique
+
+**📤 Partage rapide** : bouton de partage (API `Share` native de React Native, aucune
+dépendance) sur 3 endroits : une recette favorite (`CuisineFavorisScreen.js`, texte complet
+avec ingrédients/étapes), un objectif atteint (`ObjectifsScreen.js`, uniquement sur les
+objectifs à 100%), une note (`NotesScreen.js`, dans la vue d'édition). Ouvre la feuille de
+partage native Android (WhatsApp, SMS, mail, etc.), au choix de David à chaque fois.
+
+**🌗 Thème automatique selon l'heure** (`utils/useTheme.js`, `screens/ParametresScreen.js`).
+**Ajustement important, à bien avoir en tête** : les 3 thèmes de l'app (Cosmos, Aurora, Sunset)
+sont TOUS des thèmes sombres — il n'existe aucun vrai thème clair dans Kira OS. En créer un
+demanderait de revoir les couleurs sur une trentaine d'écrans (tous écrits en supposant du
+texte clair sur fond sombre), un chantier bien plus large qu'un interrupteur, risqué à faire
+d'un coup sans casser la lisibilité quelque part. En attendant, le mode automatique bascule
+entre les thèmes sombres EXISTANTS selon l'heure : Cosmos (neutre) de 7h à 19h, Sunset (tons
+chauds, ambiance "veillée") le reste du temps — ça donne la sensation jour/nuit demandée sans
+toucher à l'apparence de chaque écran. Interrupteur ajouté dans Paramètres → Apparence, juste
+au-dessus du sélecteur de thème manuel (grisé/désactivé tant que le mode auto est actif, pour
+éviter la confusion). **Un vrai thème clair reste possible plus tard si David le souhaite
+vraiment** — mais mieux vaut le traiter comme son propre chantier dédié plutôt que de le faire
+à la va-vite dans ce lot.
+
+Aucune nouvelle dépendance sur l'ensemble des lots 87-88, pas de rebuild nécessaire — un `eas
+update` suffit pour tout.
+
+## ✅ Lot 89 — Confirmation avant suppression (notes, objectifs)
+
+En continuant la relecture entamée au lot précédent, j'ai remarqué que supprimer une note ou
+un objectif était instantané et définitif — un appui suffisait, sans aucune confirmation. Vu
+que ces deux modules peuvent contenir du contenu personnel important (texte d'une note,
+progression d'un objectif en cours), ajouté une boîte de confirmation standard
+(`Alert.alert`, même mécanisme que la confirmation déjà présente sur les favoris de recettes
+depuis le lot 78) avant suppression définitive sur `screens/NotesScreen.js` et
+`screens/ObjectifsScreen.js`. Les articles de la liste de Courses restent volontairement sans
+confirmation : contenu trivial, ajout/suppression fréquents, une confirmation y serait plus
+gênante qu'utile. Aucune nouvelle dépendance, pas de rebuild.
+
 ## 🗂️ Repères techniques pour la suite
 
 - **Deux redémarrages de l'environnement de travail de Claude** sont survenus pendant cette
@@ -1405,14 +1688,13 @@ recettes générées par IA changent chaque jour et ne sont pas ré-consultables
   d'essayer une appli équivalente (MatLog, aLogcat) ou un branchement USB + adb depuis un PC.
 - OAuth Google Agenda (erreur 400) — en attente que David vérifie son Google Cloud Console
   (type de client "Android", SHA-1 du build preview).
-- Home Assistant — en attente que David ait son serveur installé et accessible.
+- Home Assistant — driver livré au lot 80, en attente que David configure ses URLs/jeton et teste.
 - Tuya/Smart Life — driver déjà livré au lot 46, guide de configuration du projet Tuya Cloud
   donné en conversation (pas dans un fichier) ; pas de retour de David sur Client ID/Secret/UID.
-- Guide audio/voix pour la Méditation (lot 71) — actuellement texte seul, amélioration future
-  possible.
-- Sélecteur de fichier natif pour l'import de sauvegarde (lot 74) — actuellement copier-coller
-  de texte JSON ; `expo-document-picker` pourrait remplacer ça proprement le jour où un
-  rebuild natif est de toute façon nécessaire pour autre chose.
+
+**Décision actée avec David (lot 81)** : TP-Link Kasa retiré définitivement de la liste des
+pistes futures — Home Assistant peut déjà piloter des appareils Kasa lui-même une fois
+connectés à lui, un driver dédié ferait doublon.
 
 ## 🎓 Leçon retenue ce lot-ci (procédure de build)
 

@@ -18,6 +18,8 @@ import {
   demarrerGeoKira, arreterGeoKira, getPositionActuelleCommeAdresse,
   getSceneArrivee, setSceneArrivee,
   getSceneActiveArrivee, setSceneActiveArrivee, // LOT 65
+  getSceneDepart, setSceneDepart,
+  getSceneActiveDepart, setSceneActiveDepart, // LOT 83
 } from '../utils/geoKira';
 
 // LOT 65 : ajout d'un rayon plus fin (50m) — un rayon de 100-200m déborde
@@ -35,26 +37,31 @@ export default function GeoKiraCard({ accent }) {
   const [appareilsDisponibles, setAppareilsDisponibles] = useState([]); // LOT 57
   const [sceneArrivee, setSceneArriveeState] = useState([]); // LOT 57
   const [sceneActive, setSceneActiveState] = useState(false); // LOT 65 — opt-in, false par défaut
+  const [sceneDepart, setSceneDepartState] = useState([]); // LOT 83
+  const [sceneActiveDepart, setSceneActiveDepartState] = useState(false); // LOT 83
 
   const charger = async () => {
-    const [d, a, r, p, sa] = await Promise.all([
+    const [d, a, r, p, sa, sad] = await Promise.all([
       getDomicile(), getGeoKiraActif(), getRayonGeoKira(), verifierPermissionsGeoKira(),
-      getSceneActiveArrivee(),
+      getSceneActiveArrivee(), getSceneActiveDepart(), // LOT 83
     ]);
     setDomicileState(d);
     setActif(a);
     setRayon(r);
     setPermissionsOk(p);
     setSceneActiveState(sa);
+    setSceneActiveDepartState(sad);
 
     // LOT 57 — charge les appareils domotique dispo + la scène déjà choisie
     const driversActifs = (await getData('domotique_drivers_actifs')) || ['demo'];
-    const [appareils, scene] = await Promise.all([
+    const [appareils, scene, sceneD] = await Promise.all([
       listerTousLesAppareils(driversActifs),
       getSceneArrivee(),
+      getSceneDepart(), // LOT 83
     ]);
     setAppareilsDisponibles(appareils);
     setSceneArriveeState(scene);
+    setSceneDepartState(sceneD);
   };
 
   useEffect(() => { charger(); }, []);
@@ -98,6 +105,21 @@ export default function GeoKiraCard({ accent }) {
   const toggleSceneActive = async v => {
     setSceneActiveState(v);
     await setSceneActiveArrivee(v);
+  };
+
+  // LOT 83 — symétrique pour la scène de départ (éteindre en partant)
+  const toggleAppareilSceneDepart = async appareil => {
+    const dejaDedans = sceneDepart.some(a => a.driverId === appareil.driverId && a.id === appareil.id);
+    const misAJour = dejaDedans
+      ? sceneDepart.filter(a => !(a.driverId === appareil.driverId && a.id === appareil.id))
+      : [...sceneDepart, { driverId: appareil.driverId, id: appareil.id, nom: appareil.nom }];
+    setSceneDepartState(misAJour);
+    await setSceneDepart(misAJour);
+  };
+
+  const toggleSceneActiveDepart = async v => {
+    setSceneActiveDepartState(v);
+    await setSceneActiveDepart(v);
   };
 
   const toggleActif = async v => {
@@ -226,6 +248,46 @@ export default function GeoKiraCard({ accent }) {
         <Text style={[styles.desc, { color: accent, marginTop: 8 }]}>
           Scène active — les appareils cochés ci-dessus s'allumeront à chaque arrivée
           confirmée (avec un minimum de 30 min entre deux déclenchements).
+        </Text>
+      )}
+
+      {/* ── LOT 83 : Scène de départ ── */}
+      <Text style={[styles.fieldLabel, { marginTop: 16 }]}>🚪 Scène de départ (optionnel)</Text>
+      <Text style={styles.desc}>
+        Ces appareils peuvent s'éteindre automatiquement dès que tu sors de la zone domicile —
+        pratique pour ne pas laisser de lumières allumées en partant. Même principe que la
+        scène d'arrivée : coche les appareils, PUIS active l'interrupteur dédié. Le délai
+        minimum entre deux déclenchements est plus court qu'à l'arrivée (10 min), une sortie
+        étant un événement plus net qu'une arrivée.
+      </Text>
+      {appareilsDisponibles.length === 0 ? (
+        <Text style={styles.desc}>
+          Aucun appareil domotique configuré pour l'instant — active un driver dans le module
+          Domotique pour pouvoir en choisir ici.
+        </Text>
+      ) : (
+        appareilsDisponibles.map(a => {
+          const inclus = sceneDepart.some(s => s.driverId === a.driverId && s.id === a.id);
+          return (
+            <View key={`depart-${a.driverId}-${a.id}`} style={styles.appareilRow}>
+              <Text style={{ fontSize: 15 }}>{a.driverIcon}</Text>
+              <Text style={styles.appareilNom} numberOfLines={1}>{a.nom}</Text>
+              <Toggle value={inclus} onChange={() => toggleAppareilSceneDepart(a)} color={accent} />
+            </View>
+          );
+        })
+      )}
+
+      <View style={[styles.toggleRow, sceneDepart.length === 0 && { opacity: 0.4 }]} pointerEvents={sceneDepart.length === 0 ? 'none' : 'auto'}>
+        <Text style={styles.toggleLabel}>⚡ Activer la scène de départ</Text>
+        <Toggle value={sceneActiveDepart} onChange={toggleSceneActiveDepart} color={accent} />
+      </View>
+      {sceneActiveDepart && (
+        <Text style={[styles.desc, { color: accent, marginTop: 8 }]}>
+          Scène active — les appareils cochés ci-dessus s'éteindront à chaque sortie détectée
+          de la zone domicile (avec un minimum de 10 min entre deux déclenchements). Choisis un
+          rayon qui couvre bien toute ta maison pour éviter un déclenchement en sortant juste
+          dans le jardin ou vers la boîte aux lettres.
         </Text>
       )}
     </View>

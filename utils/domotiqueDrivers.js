@@ -24,6 +24,7 @@
 // ═══════════════════════════════════════════
 
 import { driverDemo } from './driverDemo';
+import { driverHomeAssistant } from './driverHomeAssistant';
 import { driverPhilipsHue } from './driverPhilipsHue';
 import { driverTuya } from './driverTuya';
 
@@ -36,9 +37,9 @@ export const DRIVERS_DISPONIBLES = [
   driverDemo,
   driverPhilipsHue,
   driverTuya,
+  driverHomeAssistant,
   // Prochains drivers possibles (structure prête, pas encore implémentés) :
   // driverTpLinkKasa,    — ampoules/prises TP-Link Kasa, API cloud avec compte gratuit
-  // driverHomeAssistant, — pont universel si l'utilisateur a déjà un serveur Home Assistant
 ];
 
 export function getDriver(driverId) {

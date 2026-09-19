@@ -23,12 +23,15 @@ const CLE_DOMICILE = 'geokira_domicile'; // { lat, lng, adresse }
 const CLE_ACTIF = 'geokira_actif';       // bool
 const CLE_RAYON = 'geokira_rayon';       // mètres (50 | 100 | 200 | 500)
 const CLE_SCENE_ARRIVEE = 'geokira_scene_arrivee'; // [{ driverId, id, nom }] — lot 57
+const CLE_SCENE_DEPART = 'geokira_scene_depart'; // [{ driverId, id, nom }] — lot 83
 // LOT 65 — David nous a remonté deux soucis liés : des "Bon retour !" reçus en passant
 // simplement dans la rue (sans s'arrêter), et la crainte que la scène domotique (lumières)
 // s'active trop souvent pour la même raison. Trois réglages ajoutés :
 const CLE_SCENE_ACTIVE = 'geokira_scene_active';           // bool — scène domotique activée explicitement (opt-in, false par défaut)
+const CLE_SCENE_ACTIVE_DEPART = 'geokira_scene_active_depart'; // bool — lot 83, même principe pour le départ
 const CLE_NOTIF_ATTENTE = 'geokira_notif_attente';         // { notificationId, depuis } | null — voir geofencingTask.js
 const CLE_DERNIER_DECLENCHEMENT_SCENE = 'geokira_dernier_declenchement_scene'; // ISOString
+const CLE_DERNIER_DECLENCHEMENT_SCENE_DEPART = 'geokira_dernier_declenchement_scene_depart'; // ISOString — lot 83
 
 const RAYON_PAR_DEFAUT = 200;
 // Délai avant que la notification "Bon retour" ne soit réellement affichée — si tu
@@ -38,6 +41,10 @@ export const DELAI_CONFIRMATION_SECONDES = 120; // 2 minutes
 // Temps minimum entre deux déclenchements de la scène d'arrivée (lumières...), même si
 // Géo-Kira détecte plusieurs entrées rapprochées (rue passante, allers-retours...).
 export const COOLDOWN_SCENE_MS = 30 * 60 * 1000; // 30 minutes
+// LOT 83 — même principe pour la scène de départ, délai plus court : une sortie de zone
+// est un événement plus franc qu'une arrivée (pas de risque de "juste passer devant chez
+// soi" en s'éloignant), donc moins besoin de marge de sécurité.
+export const COOLDOWN_SCENE_DEPART_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
  * Récupère la position enregistrée du domicile (ou null si jamais réglée).
@@ -246,4 +253,40 @@ export async function getNotifAttente() {
 
 export async function setNotifAttente(valeur) {
   await setData(CLE_NOTIF_ATTENTE, valeur);
+}
+
+/**
+ * LOT 83 — Scène de départ : symétrique de la scène d'arrivée (lot 57), mais
+ * pour éteindre des appareils (lumières, prises...) quand Géo-Kira détecte
+ * une sortie de la zone domicile. Mêmes garde-fous : opt-in explicite
+ * (getSceneActiveDepart) + cooldown (peutDeclencherSceneDepart), stockage
+ * séparé de la scène d'arrivée pour permettre des appareils différents
+ * (ex : éteindre TOUTES les lumières en partant, mais n'en rallumer que
+ * certaines en arrivant).
+ */
+export async function getSceneDepart() {
+  return (await getData(CLE_SCENE_DEPART)) || [];
+}
+
+export async function setSceneDepart(liste) {
+  await setData(CLE_SCENE_DEPART, liste);
+}
+
+export async function getSceneActiveDepart() {
+  const v = await getData(CLE_SCENE_ACTIVE_DEPART);
+  return v === true;
+}
+
+export async function setSceneActiveDepart(actif) {
+  await setData(CLE_SCENE_ACTIVE_DEPART, actif);
+}
+
+export async function peutDeclencherSceneDepart() {
+  const dernier = await getData(CLE_DERNIER_DECLENCHEMENT_SCENE_DEPART);
+  if (!dernier) return true;
+  return Date.now() - new Date(dernier).getTime() > COOLDOWN_SCENE_DEPART_MS;
+}
+
+export async function marquerSceneDeclencheeDepart() {
+  await setData(CLE_DERNIER_DECLENCHEMENT_SCENE_DEPART, new Date().toISOString());
 }

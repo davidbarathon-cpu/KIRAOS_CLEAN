@@ -341,3 +341,63 @@ export function detecterDemandeBilanHebdo(message) {
   const low = message.toLowerCase();
   return ['bilan de la semaine', 'bilan hebdo', 'résumé hebdomadaire', 'resume hebdomadaire', "comment s'est passée ma semaine", 'récap de la semaine', 'recap de la semaine'].some(m => low.includes(m));
 }
+
+// ═══════════════════════════════════════════
+//  LOT 85 — Kira peut désormais AGIR sur le Minuteur et la Domotique
+//  directement depuis le chat, même principe que le lot 76.
+// ═══════════════════════════════════════════
+
+/**
+ * Détecte une demande de minuteur du type "lance un minuteur de 10 minutes",
+ * "démarre un timer de 90 secondes", "mets un minuteur 5 min pour les
+ * pâtes". Retourne { secondes, label } si détecté, sinon null. Le label
+ * (facultatif, ex: "pour les pâtes") sert à personnaliser la notification.
+ */
+export function detecterLancementMinuteur(message) {
+  const low = message.toLowerCase();
+  const declencheurs = ['minuteur', 'timer', 'compte à rebours', 'compte a rebours'];
+  if (!declencheurs.some(d => low.includes(d))) return null;
+  // Un verbe d'action est requis pour ne pas confondre avec une simple
+  // mention du mot (ex: "comment fonctionne le minuteur ?").
+  if (!/\b(lance|démarre|demarre|mets|mettre|active|crée|cree|programme)\b/.test(low)) return null;
+
+  const matchMinutes = low.match(/(\d+)\s*(?:min|minutes?)\b/);
+  const matchSecondes = low.match(/(\d+)\s*(?:sec|secondes?)\b/);
+  if (!matchMinutes && !matchSecondes) return null;
+
+  const secondes = (matchMinutes ? parseInt(matchMinutes[1], 10) * 60 : 0) + (matchSecondes ? parseInt(matchSecondes[1], 10) : 0);
+  if (secondes <= 0) return null;
+
+  // Label optionnel après "pour" (ex: "minuteur de 5 minutes pour les pâtes")
+  const matchLabel = message.match(/\bpour\s+(.+)$/i);
+  const label = matchLabel ? matchLabel[1].trim().replace(/[.!?]+$/, '') : '';
+
+  return { secondes, label };
+}
+
+/**
+ * Détecte une commande domotique du type "allume le salon", "éteins la
+ * chambre", "coupe la lumière de la cuisine". Retourne { action, recherche }
+ * où action vaut 'allumer' ou 'eteindre', et recherche est le texte à
+ * comparer (au mieux) aux noms d'appareils réels — le matching précis se
+ * fait côté KiraChatScreen, qui a accès à la liste des appareils.
+ */
+export function detecterCommandeDomotique(message) {
+  const low = message.toLowerCase();
+
+  let action = null;
+  if (/\b(allume|allumer)\b/.test(low)) action = 'allumer';
+  else if (/\b(éteins|eteins|éteindre|eteindre|coupe|couper)\b/.test(low)) action = 'eteindre';
+  if (!action) return null;
+
+  // Retire le verbe déclencheur et les mots de liaison courants pour isoler
+  // le nom approximatif de l'appareil/pièce visé.
+  let recherche = low
+    .replace(/\b(allume|allumer|éteins|eteins|éteindre|eteindre|coupe|couper)\b/g, '')
+    .replace(/\b(le|la|les|l'|de|du|des|dans|lumière|lumiere|lampe|prise)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!recherche) return null;
+  return { action, recherche };
+}

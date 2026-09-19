@@ -15,6 +15,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -22,7 +23,8 @@ import {
 import { Chip, KiraFAB, ModuleCard, ProgressRing, SectionLabel } from '../components/Shared';
 import { separerModulesSuggeres } from '../utils/modulesDynamiques'; // LOT 75
 import { analyzeContext, generatePredictions } from '../utils/kiraBrain';
-import { getData } from '../utils/storage';
+import { getRappelsHabitudes } from '../utils/kiraRappelsHabitudes'; // LOT 87
+import { getData, setData } from '../utils/storage';
 import { getSanteDuJour } from '../utils/santeManager';
 import { getTheme, KIRA_STATE_COLORS, KIRA_STATE_LABELS, PALETTE } from '../utils/theme';
 import { useKiraTheme } from '../utils/useTheme';
@@ -30,9 +32,10 @@ import { getCustomModules, versEntreeModuleAccueil } from '../utils/customModule
 import { getAllApiKeys } from '../utils/apiKeys';
 import { getMeteoReelle } from '../utils/weatherCaller';
 import { cacherMeteoPourWidget, refreshKiraWidget } from '../utils/widgetUpdater';
-import { genererTexteBriefing, lireBriefing } from '../utils/kiraBriefing';
+import { genererTexteBriefing, genererTexteBriefingSoir, lireBriefing } from '../utils/kiraBriefing';
 import { getResumeActivitePourBriefing } from '../utils/kiraActiviteRecente'; // LOT 74
 import { getDictonDuJour } from '../utils/dictons';
+import { yATilDesNouveautesNonVues } from '../utils/nouveautes'; // LOT 85
 
 const TOUS_MODULES = [
   { id: 'agenda',     icon: '📅', label: 'Agenda',         desc: 'Mes événements',     color: PALETTE.purple,  screen: 'Agenda' },
@@ -59,6 +62,11 @@ const TOUS_MODULES = [
 export default function HomeScreen({ navigation }) {
   const theme = useKiraTheme();
   const [sante, setSante] = useState({});
+  const [cerclesVisibles, setCerclesVisibles] = useState(['pas', 'eau', 'kcal', 'som']); // LOT 79
+  const [recherche, setRecherche] = useState(''); // LOT 85
+  const [modulesEpingles, setModulesEpingles] = useState([]); // LOT 85
+  const [messageEpingle, setMessageEpingle] = useState(null); // LOT 85
+  const [nouveautesNonVues, setNouveautesNonVues] = useState(false); // LOT 85
   const [agenda, setAgenda] = useState([]);
   const [kiraState, setKiraState] = useState('flow');
   const [predictions, setPredictions] = useState([]);
@@ -99,19 +107,27 @@ export default function HomeScreen({ navigation }) {
   }, [meteo.temp]);
 
   const loadData = useCallback(async () => {
-    const [s, a, m, customs] = await Promise.all([
+    const [s, a, m, customs, cercles, epingles] = await Promise.all([
       getSanteDuJour(),
       getData('agenda'),
       getData('modules_actifs'),
       getCustomModules(),
+      getData('sante_cercles_visibles'), // LOT 79 — même réglage que l'écran Santé
+      getData('modules_epingles'), // LOT 85
     ]);
     setSante(s || {});
     setAgenda(a || []);
+    setCerclesVisibles(Array.isArray(cercles) && cercles.length ? cercles : ['pas', 'eau', 'kcal', 'som']);
+    setModulesEpingles(Array.isArray(epingles) ? epingles : []);
+    yATilDesNouveautesNonVues().then(setNouveautesNonVues); // LOT 85
     if (m && m.length) setModulesActifs(m);
     setModulesPersonnalises(customs);
     const heureStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     setKiraState(analyzeContext(a || [], s || {}, heureStr));
-    setPredictions(generatePredictions(a || [], s || {}, heureStr));
+    // LOT 87 — ajoute d'éventuels rappels d'habitudes (poids, guitare,
+    // méditation) à la suite des prédictions habituelles.
+    const predictionsBase = generatePredictions(a || [], s || {}, heureStr);
+    getRappelsHabitudes().then(rappels => setPredictions([...predictionsBase, ...rappels]));
     chargerMeteo();
     // lot 41 : agenda/santé viennent de changer de valeur → widget à jour
     refreshKiraWidget();
@@ -148,16 +164,14 @@ export default function HomeScreen({ navigation }) {
       return;
     }
     const [profil, activite] = await Promise.all([getData('profil'), getResumeActivitePourBriefing()]);
-    const texte = genererTexteBriefing({
-      prenom: profil?.prenom || profil?.nom || '',
-      heure,
-      kiraState,
-      meteo,
-      agenda,
-      sante,
-      dicton,
-      activite,
-    });
+    const prenom = profil?.prenom || profil?.nom || '';
+    // LOT 87 — après 18h, le même bouton lit le résumé du soir plutôt que
+    // le briefing matinal : un seul point d'entrée qui s'adapte au moment
+    // de la journée, plutôt que d'ajouter un deuxième bouton à côté.
+    const estLeSoir = parseInt(heure, 10) >= 18;
+    const texte = estLeSoir
+      ? genererTexteBriefingSoir({ prenom, activite, sante, dicton })
+      : genererTexteBriefing({ prenom, heure, kiraState, meteo, agenda, sante, dicton, activite });
     lireBriefing(texte, {
       onDebut: () => setBriefingEnCours(true),
       onFin: () => setBriefingEnCours(false),
@@ -171,10 +185,42 @@ export default function HomeScreen({ navigation }) {
   // ajouterait une case de complexité inutile pour un module qu'il a lui-même créé).
   const modulesPersonnalisesAffiches = modulesPersonnalises.map(versEntreeModuleAccueil);
   const tousLesModulesAffiches = [...modulesAffiches, ...modulesPersonnalisesAffiches];
+
+  // LOT 85 — bascule l'épinglage d'un module en restant appuyé dessus.
+  // Limité à 6 favoris : au-delà, ça perd son intérêt (l'idée est d'avoir
+  // ses quelques modules du quotidien tout en haut, pas de tout épingler).
+  const MAX_EPINGLES = 6;
+  const toggleEpingle = async id => {
+    const dejaEpingle = modulesEpingles.includes(id);
+    if (!dejaEpingle && modulesEpingles.length >= MAX_EPINGLES) {
+      setMessageEpingle(`Maximum ${MAX_EPINGLES} favoris — désépingle-en un d'abord.`);
+      setTimeout(() => setMessageEpingle(null), 2500);
+      return;
+    }
+    const misAJour = dejaEpingle ? modulesEpingles.filter(x => x !== id) : [...modulesEpingles, id];
+    setModulesEpingles(misAJour);
+    await setData('modules_epingles', misAJour);
+    setMessageEpingle(dejaEpingle ? '☆ Retiré des favoris' : '⭐ Ajouté aux favoris');
+    setTimeout(() => setMessageEpingle(null), 1500);
+  };
+
+  // LOT 85 — recherche simple par nom/description, insensible à la casse et
+  // aux accents (pratique vu le nombre de modules : "meteo" doit trouver
+  // "Météo"). Les modules personnalisés sont inclus dans la recherche.
+  const normaliser = txt => txt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const rechercheNormalisee = normaliser(recherche.trim());
+  const modulesTrouves = rechercheNormalisee
+    ? tousLesModulesAffiches.filter(m => normaliser(m.label).includes(rechercheNormalisee) || normaliser(m.desc || '').includes(rechercheNormalisee))
+    : [];
+
+  const modulesEpinglesAffiches = tousLesModulesAffiches.filter(m => modulesEpingles.includes(m.id));
   // LOT 75 — modules qui remontent selon le moment de la journée (demande
   // du tout premier cahier des charges). "heure" (déjà calculée plus haut
   // pour l'horloge) est au format "HH:MM" — on en extrait juste les heures.
-  const { suggeres: modulesSuggeres, autres: modulesRestants } = separerModulesSuggeres(tousLesModulesAffiches, parseInt(heure, 10));
+  // LOT 85 — les modules épinglés sont retirés d'ici : ils ont leur propre
+  // section "⭐ Favoris" tout en haut, pas besoin de les voir deux fois.
+  const modulesNonEpingles = tousLesModulesAffiches.filter(m => !modulesEpingles.includes(m.id));
+  const { suggeres: modulesSuggeres, autres: modulesRestants } = separerModulesSuggeres(modulesNonEpingles, parseInt(heure, 10));
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg }]}>
@@ -198,7 +244,11 @@ export default function HomeScreen({ navigation }) {
                 <Text style={{ fontSize: 20 }}>{meteo.icon}</Text>
                 <Text style={[styles.meteoTemp, { color: theme.accent }]}>{meteo.temp !== null ? `${meteo.temp}°` : '...'}</Text>
               </TouchableOpacity>
-              {/* Bouton Paramètres — maintenant fonctionnel */}
+              {/* LOT 85 — accès au journal des nouveautés, avec petit badge tant que David ne l'a pas ouvert */}
+              <TouchableOpacity style={styles.settingsBtn} onPress={() => navigation.navigate('Nouveautes')}>
+                <Text style={{ fontSize: 16 }}>🆕</Text>
+                {nouveautesNonVues && <View style={styles.badgeNouveaute} />}
+              </TouchableOpacity>
               <TouchableOpacity style={styles.settingsBtn} onPress={() => navigation.navigate('Parametres')}>
                 <Text style={{ fontSize: 16 }}>⚙️</Text>
               </TouchableOpacity>
@@ -211,17 +261,17 @@ export default function HomeScreen({ navigation }) {
               Kira en mode <Text style={{ color: kColor, fontWeight: '700' }}>{kLabel}</Text>
             </Text>
             <TouchableOpacity onPress={lancerBriefing} style={styles.briefingBtn}>
-              <Text style={{ fontSize: 12 }}>{briefingEnCours ? '⏹' : '🎙️'}</Text>
+              <Text style={{ fontSize: 12 }}>{briefingEnCours ? '⏹' : (parseInt(heure, 10) >= 18 ? '🌙' : '🎙️')}</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.ringsRow}>
             {[
-              { v: sante.pas || 0, max: sante.oP || 10000, c: PALETTE.blue,   l: `${Math.round((sante.pas || 0) / 1000)}k`, lab: 'Pas' },
-              { v: sante.eau || 0, max: sante.oEau || 2.5, c: PALETTE.teal,   l: `${sante.eau || 0}L`,                      lab: 'Eau' },
-              { v: sante.cal || 0, max: sante.oCal || 2200, c: PALETTE.orange, l: `${sante.cal || 0}`,                       lab: 'kcal' },
-              { v: sante.som || 0, max: sante.oSom || 8,   c: PALETTE.violet, l: `${sante.som || 0}h`,                      lab: 'Sommeil' },
-            ].map(r => (
+              { id: 'pas', v: sante.pas || 0, max: sante.oP || 10000, c: PALETTE.blue,   l: `${Math.round((sante.pas || 0) / 1000)}k`, lab: 'Pas' },
+              { id: 'eau', v: sante.eau || 0, max: sante.oEau || 2.5, c: PALETTE.teal,   l: `${sante.eau || 0}L`,                      lab: 'Eau' },
+              { id: 'kcal', v: sante.cal || 0, max: sante.oCal || 2200, c: PALETTE.orange, l: `${sante.cal || 0}`,                       lab: 'kcal' },
+              { id: 'som', v: sante.som || 0, max: sante.oSom || 8,   c: PALETTE.violet, l: `${sante.som || 0}h`,                      lab: 'Sommeil' },
+            ].filter(r => cerclesVisibles.includes(r.id)).map(r => (
               <View key={r.lab} style={styles.ringItem}>
                 <ProgressRing value={r.v} max={r.max} color={r.c} size={50} label={r.l} />
                 <Text style={styles.ringLabel}>{r.lab}</Text>
@@ -231,6 +281,52 @@ export default function HomeScreen({ navigation }) {
         </View>
 
         <View style={styles.content}>
+          {/* LOT 85 — Recherche de module, pratique vu le nombre de modules
+              disponibles (retrouver "Potager" ou "Traduction" sans scroller). */}
+          <View style={[styles.rechercheBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={{ fontSize: 15 }}>🔍</Text>
+            <TextInput
+              style={styles.rechercheInput}
+              placeholder="Chercher un module..."
+              placeholderTextColor="#666677"
+              value={recherche}
+              onChangeText={setRecherche}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {recherche.length > 0 && (
+              <TouchableOpacity onPress={() => setRecherche('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={{ color: '#888', fontSize: 13 }}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {messageEpingle && <Text style={[styles.messageEpingle, { color: theme.accent }]}>{messageEpingle}</Text>}
+
+          {rechercheNormalisee ? (
+            // ── Résultats de recherche : remplace tout le reste tant qu'on cherche ──
+            <>
+              <SectionLabel style={{ marginTop: 14, marginBottom: 10 }}>
+                Résultats ({modulesTrouves.length})
+              </SectionLabel>
+              {modulesTrouves.length === 0 ? (
+                <Text style={styles.emptyRecherche}>Aucun module ne correspond à "{recherche}".</Text>
+              ) : (
+                <View style={styles.modulesGrid}>
+                  {modulesTrouves.map(m => (
+                    <ModuleCard
+                      key={m.id}
+                      icon={m.icon} label={m.label} desc={m.desc} color={m.color} theme={theme}
+                      epingle={modulesEpingles.includes(m.id)}
+                      onPress={() => navigation.navigate(m.screen, m.params)}
+                      onLongPress={() => toggleEpingle(m.id)}
+                    />
+                  ))}
+                </View>
+              )}
+            </>
+          ) : (
+            <>
           {/* Prédictions Kira */}
           {predictions.length > 0 && (
             <View style={{ marginTop: 14 }}>
@@ -242,7 +338,10 @@ export default function HomeScreen({ navigation }) {
                     <Text style={styles.predText}>{p.msg}</Text>
                     <TouchableOpacity
                       style={[styles.predBtn, { backgroundColor: p.color }]}
-                      onPress={() => setPredictions(predictions.filter(x => x.id !== p.id))}
+                      onPress={() => {
+                        setPredictions(predictions.filter(x => x.id !== p.id));
+                        if (p.screen) navigation.navigate(p.screen); // LOT 87 — rappels d'habitudes
+                      }}
                     >
                       <Text style={styles.predBtnText}>{p.action}</Text>
                     </TouchableOpacity>
@@ -281,13 +380,35 @@ export default function HomeScreen({ navigation }) {
             )}
           </View>
 
+          {/* LOT 85 — Modules épinglés par David (appui long sur une carte) */}
+          {modulesEpinglesAffiches.length > 0 && (
+            <>
+              <SectionLabel style={{ marginTop: 18, marginBottom: 10 }}>⭐ Favoris</SectionLabel>
+              <View style={styles.modulesGrid}>
+                {modulesEpinglesAffiches.map(m => (
+                  <ModuleCard
+                    key={m.id}
+                    icon={m.icon} label={m.label} desc={m.desc} color={m.color} theme={theme}
+                    epingle
+                    onPress={() => navigation.navigate(m.screen, m.params)}
+                    onLongPress={() => toggleEpingle(m.id)}
+                  />
+                ))}
+              </View>
+            </>
+          )}
+
           {/* LOT 75 — Modules suggérés selon le moment de la journée */}
           {modulesSuggeres.length > 0 && (
             <>
               <SectionLabel style={{ marginTop: 18, marginBottom: 10 }}>🌟 Suggérés maintenant</SectionLabel>
               <View style={styles.modulesGrid}>
                 {modulesSuggeres.map(m => (
-                  <ModuleCard key={m.id} icon={m.icon} label={m.label} desc={m.desc} color={m.color} theme={theme} onPress={() => navigation.navigate(m.screen, m.params)} />
+                  <ModuleCard
+                    key={m.id} icon={m.icon} label={m.label} desc={m.desc} color={m.color} theme={theme}
+                    onPress={() => navigation.navigate(m.screen, m.params)}
+                    onLongPress={() => toggleEpingle(m.id)}
+                  />
                 ))}
               </View>
             </>
@@ -299,9 +420,14 @@ export default function HomeScreen({ navigation }) {
           </SectionLabel>
           <View style={styles.modulesGrid}>
             {modulesRestants.map(m => (
-              <ModuleCard key={m.id} icon={m.icon} label={m.label} desc={m.desc} color={m.color} theme={theme} onPress={() => navigation.navigate(m.screen, m.params)} />
+              <ModuleCard
+                key={m.id} icon={m.icon} label={m.label} desc={m.desc} color={m.color} theme={theme}
+                onPress={() => navigation.navigate(m.screen, m.params)}
+                onLongPress={() => toggleEpingle(m.id)}
+              />
             ))}
           </View>
+          <Text style={styles.astuceEpingle}>💡 Reste appuyé sur un module pour l'épingler en favori.</Text>
           <TouchableOpacity style={styles.creerModuleBtn} onPress={() => navigation.navigate('CreerModule')}>
             <Text style={[styles.creerModuleText, { color: theme.accent }]}>✨ Créer un nouveau module personnalisé</Text>
           </TouchableOpacity>
@@ -310,6 +436,8 @@ export default function HomeScreen({ navigation }) {
             connexions API (météo, Google Agenda, actualités), notifications, et le micro
             permanent "Hey Kira".
           </Text>
+          </>
+          )}
         </View>
       </ScrollView>
 
@@ -328,6 +456,7 @@ const styles = StyleSheet.create({
   meteoBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, borderWidth: 1, alignItems: 'center' },
   meteoTemp: { fontSize: 13, fontWeight: '800', marginTop: 1 },
   settingsBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },
+  badgeNouveaute: { position: 'absolute', top: 6, right: 7, width: 8, height: 8, borderRadius: 4, backgroundColor: PALETTE.pink },
   stateBar: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, marginBottom: 12 },
   statePulse: { width: 7, height: 7, borderRadius: 4, marginRight: 8 },
   stateText: { fontSize: 11, color: '#888899', flex: 1 },
@@ -354,4 +483,9 @@ const styles = StyleSheet.create({
   creerModuleBtn: { padding: 12, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', marginTop: 12 },
   creerModuleText: { fontWeight: '600', fontSize: 13 },
   comingSoon: { fontSize: 11, color: '#333344', textAlign: 'center', marginTop: 16, lineHeight: 16 },
+  rechercheBox: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, marginTop: 4 },
+  rechercheInput: { flex: 1, color: '#fff', fontSize: 13 },
+  messageEpingle: { fontSize: 12, fontWeight: '600', textAlign: 'center', marginTop: 10 },
+  emptyRecherche: { color: '#666677', fontSize: 13, textAlign: 'center', marginTop: 30 },
+  astuceEpingle: { fontSize: 11, color: '#555566', textAlign: 'center', marginTop: 10 },
 });

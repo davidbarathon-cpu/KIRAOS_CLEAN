@@ -6,11 +6,11 @@
 //  concrétisé : "Elle devra aussi me proposer un résumé matinal sur
 //  la journée à venir, en puisant dans tous les modules, dicton,
 //  agenda, météo, actualités, etc." Ce module compose ce texte, et
-//  utilise expo-speech (déjà utilisé ailleurs dans l'app, pour le
-//  chat et l'écoute rapide) pour le lire à voix haute.
+//  utilise kiraVoix.js (lot 82 — voix naturelle Gemini avec repli sur
+//  expo-speech) pour le lire à voix haute.
 // ═══════════════════════════════════════════
 
-import * as Speech from 'expo-speech';
+import { arreterVoixKira, parlerAvecVoixKira } from './kiraVoix';
 
 /**
  * Construit le texte du briefing à partir de données déjà chargées
@@ -91,26 +91,87 @@ export function genererTexteBriefing(data) {
   return phrases.join(' ');
 }
 
+// ═══════════════════════════════════════════
+//  LOT 87 — Résumé du soir, symétrique du briefing matinal ci-dessus.
+//
+//  Contrairement au briefing du matin, ne parle PAS de l'agenda du
+//  lendemain : le modèle de données de l'Agenda (utils/googleCalendar.js,
+//  AgendaScreen.js) ne conserve pas de date par événement, seulement une
+//  heure — toute la logique actuelle suppose "aujourd'hui". Ajouter une
+//  vraie notion de "demain" demanderait de faire transiter un champ date
+//  partout (stockage local + conversion Google + création d'événement),
+//  un chantier plus large qu'un simple résumé du soir. En attendant, ce
+//  résumé se concentre sur ce qui est fiable : le bilan de la journée
+//  écoulée (objectifs, méditation, humeur, eau) — voir
+//  utils/kiraActiviteRecente.js, déjà utilisé par le briefing du matin.
+// ═══════════════════════════════════════════
+
+/**
+ * data attendu : { prenom, activite (voir getResumeActivitePourBriefing),
+ *   sante: {eau, oEau}, dicton }
+ */
+export function genererTexteBriefingSoir(data) {
+  const { prenom, activite, sante = {}, dicton } = data;
+  const nom = prenom || '';
+  const phrases = [];
+
+  phrases.push(`Bonsoir${nom ? ' ' + nom : ''} ! Petit récap avant de te reposer.`);
+
+  // ── Méditation ──
+  if (activite?.meditationFaiteAujourdhui) {
+    phrases.push('Tu as pris le temps de méditer aujourd\'hui, belle habitude.');
+  } else {
+    phrases.push('Tu n\'as pas encore pris de moment de méditation aujourd\'hui — même cinq minutes peuvent aider à bien dormir, si le cœur t\'en dit.');
+  }
+
+  // ── Objectifs ──
+  if (activite?.objectifsEnCours > 0) {
+    phrases.push(`Tu as ${activite.objectifsEnCours} objectif${activite.objectifsEnCours > 1 ? 's' : ''} personnel${activite.objectifsEnCours > 1 ? 's' : ''} en cours.`);
+  }
+
+  // ── Pomodoro / concentration ──
+  if (activite?.pomodorosAujourdhui > 0) {
+    phrases.push(`Côté concentration, ${activite.pomodorosAujourdhui} session${activite.pomodorosAujourdhui > 1 ? 's' : ''} terminée${activite.pomodorosAujourdhui > 1 ? 's' : ''} aujourd'hui, bien joué.`);
+  }
+
+  // ── Eau ──
+  if (sante.eau !== undefined && sante.oEau) {
+    const pct = Math.round((sante.eau / sante.oEau) * 100);
+    if (pct < 70) phrases.push(`Tu n'as bu que ${pct}% de ton objectif d'eau aujourd'hui — un dernier verre avant de dormir ne fera pas de mal.`);
+  }
+
+  // ── Humeur (même consigne de tact que le briefing du matin : on
+  // rapporte un fait déclaré par l'utilisateur, jamais un diagnostic) ──
+  if (activite?.humeur) {
+    phrases.push(`Tu avais noté te sentir plutôt "${activite.humeur.label}" aujourd'hui.`);
+  }
+
+  if (dicton?.t) {
+    phrases.push(`Pour finir la journée en douceur : "${dicton.t}", ${dicton.a ? 'de ' + dicton.a : ''}.`);
+  }
+
+  phrases.push('Bonne nuit !');
+
+  return phrases.join(' ');
+}
+
 let enCoursDeLecture = false;
 
 export function lireBriefing(texte, { onDebut, onFin } = {}) {
   if (enCoursDeLecture) {
-    Speech.stop();
+    arreterVoixKira();
     enCoursDeLecture = false;
     onFin?.();
     return;
   }
   enCoursDeLecture = true;
   onDebut?.();
-  Speech.speak(texte, {
-    language: 'fr-FR',
-    onDone: () => { enCoursDeLecture = false; onFin?.(); },
-    onStopped: () => { enCoursDeLecture = false; onFin?.(); },
-    onError: () => { enCoursDeLecture = false; onFin?.(); },
+  parlerAvecVoixKira(texte, {
+    onFin: () => { enCoursDeLecture = false; onFin?.(); },
   });
 }
 
 export function arreterBriefing() {
-  Speech.stop();
+  arreterVoixKira();
   enCoursDeLecture = false;
 }

@@ -12,7 +12,7 @@
 
 import * as TaskManager from 'expo-task-manager';
 import * as Notifications from 'expo-notifications';
-import { GEOFENCE_TASK_NAME, DELAI_CONFIRMATION_SECONDES, getSceneActiveArrivee, peutDeclencherScene, marquerSceneDeclenchee } from './geoKira';
+import { GEOFENCE_TASK_NAME, DELAI_CONFIRMATION_SECONDES, getSceneActiveArrivee, peutDeclencherScene, marquerSceneDeclenchee, getSceneActiveDepart, peutDeclencherSceneDepart, marquerSceneDeclencheeDepart } from './geoKira';
 import { getData, setData } from './storage';
 import { getDriver } from './domotiqueDrivers'; // LOT 57 — scène d'arrivée
 
@@ -67,6 +67,7 @@ TaskManager.defineTask(GEOFENCE_TASK_NAME, async ({ data, error }) => {
       await setData('geokira_notif_attente', null);
     }
     await enregistrerEvenement('sortie');
+    await declencherSceneDepart(); // LOT 83
   }
 });
 
@@ -113,6 +114,34 @@ async function declencherSceneArrivee() {
   );
 
   await marquerSceneDeclenchee();
+}
+
+/**
+ * LOT 83 — Symétrique de declencherSceneArrivee() ci-dessus, mais éteint les
+ * appareils choisis comme "scène de départ" (voir GeoKiraCard.js) quand
+ * Géo-Kira détecte une sortie confirmée de la zone domicile. Mêmes
+ * garde-fous : opt-in explicite + cooldown (10 min, plus court qu'à
+ * l'arrivée — voir COOLDOWN_SCENE_DEPART_MS dans geoKira.js).
+ */
+async function declencherSceneDepart() {
+  const sceneActivee = await getSceneActiveDepart();
+  if (!sceneActivee) return;
+
+  const cooldownOk = await peutDeclencherSceneDepart();
+  if (!cooldownOk) return;
+
+  const scene = (await getData('geokira_scene_depart')) || [];
+  if (scene.length === 0) return;
+
+  await Promise.allSettled(
+    scene.map(({ driverId, id }) => {
+      const driver = getDriver(driverId);
+      if (!driver) return Promise.resolve();
+      return driver.eteindre(id);
+    })
+  );
+
+  await marquerSceneDeclencheeDepart();
 }
 
 // ── Note technique ──

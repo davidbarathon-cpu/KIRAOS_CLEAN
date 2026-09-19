@@ -123,10 +123,10 @@ export default function EcouteRapideScreen({ navigation }) {
 
     const clean = reponse.replace(/\*\*/g, '').replace(/\n/g, ' ').slice(0, 400);
     try {
-      const Speech = require('expo-speech');
-      Speech.speak(clean, { language: 'fr-FR' });
+      const { parlerAvecVoixKira } = require('../utils/kiraVoix'); // LOT 82
+      parlerAvecVoixKira(clean);
     } catch {
-      // expo-speech non disponible ou erreur silencieuse — pas bloquant
+      // voix indisponible ou erreur silencieuse — pas bloquant
     }
   };
 

@@ -6,6 +6,8 @@
 // ═══════════════════════════════════════════
 
 import { useFocusEffect } from '@react-navigation/native';
+import * as DocumentPicker from 'expo-document-picker'; // LOT 81
+import { File } from 'expo-file-system'; // LOT 81
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -54,6 +56,8 @@ import {
   ouvrirInstallationHealthConnect,
 } from '../utils/healthConnectService';
 import { getTuyaConfigActuelle, setTuyaConfig } from '../utils/driverTuya';
+import { getHaConfigActuelle, setHaConfig } from '../utils/driverHomeAssistant';
+import { getVoixGeminiChoisie, setVoixGeminiChoisie, VOIX_GEMINI_DISPONIBLES } from '../utils/kiraVoix'; // LOT 82
 import { deconnecterGoogle, estConnecteAGoogle, getGoogleClientId, setGoogleClientId } from '../utils/googleAuth';
 import {
   annulerParCle,
@@ -62,7 +66,7 @@ import {
   reprogrammerQuotidienne,
   verifierPermissionNotifications,
 } from '../utils/notifications';
-import { exporterDonneesJSON, importerDonneesJSON } from '../utils/dataBackup'; // LOT 58 / LOT 74
+import { exporterDonneesJSON, getDateDerniereSauvegardeAuto, importerDonneesJSON } from '../utils/dataBackup'; // LOT 58 / LOT 74 / LOT 87
 import { getData, resetAllData, setData } from '../utils/storage';
 import { getTheme, PALETTE, THEMES } from '../utils/theme';
 
@@ -112,6 +116,7 @@ export default function ParametresScreen({ navigation }) {
   const [modulesPersonnalises, setModulesPersonnalises] = useState([]);
   const [saved, setSaved] = useState(false);
   const [exportEnCours, setExportEnCours] = useState(false); // LOT 58
+  const [dateSauvegardeAuto, setDateSauvegardeAuto] = useState(null); // LOT 87
   const [showImport, setShowImport] = useState(false); // LOT 74
   const [texteImport, setTexteImport] = useState('');
   const [importEnCours, setImportEnCours] = useState(false);
@@ -123,6 +128,10 @@ export default function ParametresScreen({ navigation }) {
   const [tuyaForm, setTuyaForm] = useState({ clientId: '', clientSecret: '', uid: '', region: 'eu' });
   const [tuyaConfigure, setTuyaConfigure] = useState(false);
   const [tuyaMsg, setTuyaMsg] = useState(null);
+  const [haForm, setHaForm] = useState({ urlLocale: '', urlDistante: '', token: '' }); // LOT 80
+  const [haConfigure, setHaConfigure] = useState(false);
+  const [haMsg, setHaMsg] = useState(null);
+  const [voixChoisie, setVoixChoisie] = useState('Sulafat'); // LOT 82
 
   // ── État spécifique à la section API ──
   const [apiKeys, setApiKeysState] = useState({});
@@ -192,6 +201,11 @@ export default function ParametresScreen({ navigation }) {
         region: tuyaConfig.region || 'eu',
       });
       setTuyaConfigure(!!(tuyaConfig.clientId && tuyaConfig.clientSecret && tuyaConfig.uid));
+      const haConfig = await getHaConfigActuelle(); // LOT 80
+      setHaForm({ urlLocale: haConfig.urlLocale || '', urlDistante: haConfig.urlDistante || '', token: haConfig.token || '' });
+      setHaConfigure(!!((haConfig.urlLocale || haConfig.urlDistante) && haConfig.token));
+      setVoixChoisie(await getVoixGeminiChoisie()); // LOT 82
+      setDateSauvegardeAuto(await getDateDerniereSauvegardeAuto()); // LOT 87
     })();
   }, []);
 
@@ -342,6 +356,25 @@ export default function ParametresScreen({ navigation }) {
   // LOT 74 — Rend fonctionnel le bouton d'import (jusqu'ici "bientôt disponible").
   // Confirmation obligatoire avant d'écraser les données actuelles — action
   // irréversible, comme la réinitialisation.
+  const [fichierImportMsg, setFichierImportMsg] = useState(null); // LOT 81
+
+  // LOT 81 — permet de choisir directement le fichier .json exporté, au lieu
+  // de devoir l'ouvrir ailleurs et copier-coller tout son contenu à la main.
+  const choisirFichierImport = async () => {
+    setFichierImportMsg(null);
+    try {
+      const resultat = await DocumentPicker.getDocumentAsync({ type: 'application/json', copyToCacheDirectory: true });
+      if (resultat.canceled) return;
+      const uri = resultat.assets?.[0]?.uri;
+      if (!uri) return;
+      const contenu = await new File(uri).text();
+      setTexteImport(contenu);
+      setFichierImportMsg(`✅ "${resultat.assets[0].name}" chargé — vérifie puis appuie sur "Restaurer cette sauvegarde".`);
+    } catch (e) {
+      setFichierImportMsg(`⚠️ Impossible de lire ce fichier : ${e.message}`);
+    }
+  };
+
   const lancerImportDonnees = () => {
     if (!texteImport.trim()) return;
     Alert.alert(
@@ -472,7 +505,21 @@ export default function ParametresScreen({ navigation }) {
       return (
         <View>
           <SectionLabel>Thème</SectionLabel>
-          <View style={styles.themeRow}>
+          {/* LOT 88 — mode automatique : bascule entre Cosmos (jour, 7h-19h)
+              et Sunset (soir/nuit) tout seul. Désactive la sélection manuelle
+              tant qu'il est actif, pour éviter la confusion ("j'ai choisi
+              Aurora, pourquoi ça change ?"). */}
+          <View style={[styles.toggleRow, { marginBottom: 12 }]}>
+            <Text style={styles.toggleLabel}>🌗 Thème automatique selon l'heure</Text>
+            <Toggle value={!!prefs.themeAuto} onChange={v => updatePref('themeAuto', v)} color={accent} />
+          </View>
+          {prefs.themeAuto && (
+            <Text style={[styles.infoSmall, { marginBottom: 10 }]}>
+              Cosmos le jour (7h-19h), Sunset le soir — la sélection manuelle ci-dessous est
+              momentanément ignorée.
+            </Text>
+          )}
+          <View style={[styles.themeRow, prefs.themeAuto && { opacity: 0.4 }]} pointerEvents={prefs.themeAuto ? 'none' : 'auto'}>
             {Object.entries(THEMES).map(([key, th]) => (
               <TouchableOpacity
                 key={key}
@@ -1054,6 +1101,79 @@ export default function ParametresScreen({ navigation }) {
             </Text>
           </View>
 
+          {/* ── Home Assistant (lot 80 — pont universel, 2 URLs + jeton) ── */}
+          <SectionLabel style={{ marginTop: 18 }}>🏠 Home Assistant (Domotique)</SectionLabel>
+          <View style={[styles.providerCard, { borderColor: haConfigure ? PALETTE.green + '35' : 'rgba(255,255,255,0.07)' }]}>
+            <View style={styles.providerHeader}>
+              <Text style={{ fontSize: 20 }}>🏠</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.providerName}>Serveur Home Assistant</Text>
+                <Text style={styles.providerDesc}>
+                  Expose tous les appareils déjà connectés à ton serveur (Zigbee, Wi-Fi, Hue,
+                  Tuya...). L'adresse locale est essayée en premier (rapide, Wi-Fi maison
+                  uniquement) ; l'adresse distante prend le relais automatiquement si besoin.
+                </Text>
+              </View>
+              {haConfigure && <Text style={styles.connectedTag}>✓ Configuré</Text>}
+            </View>
+
+            <Text style={styles.fieldLabel}>Adresse locale (Wi-Fi maison)</Text>
+            <TextInput
+              style={styles.keyInput}
+              placeholder="http://homeassistant.local:8123"
+              placeholderTextColor="#555566"
+              value={haForm.urlLocale}
+              onChangeText={t => setHaForm({ ...haForm, urlLocale: t })}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+            <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Adresse distante (hors de chez toi — optionnel)</Text>
+            <TextInput
+              style={styles.keyInput}
+              placeholder="https://xxxxx.ui.nabu.casa"
+              placeholderTextColor="#555566"
+              value={haForm.urlDistante}
+              onChangeText={t => setHaForm({ ...haForm, urlDistante: t })}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+            <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Jeton d'accès longue durée</Text>
+            <TextInput
+              style={styles.keyInput}
+              placeholder="eyJhbGciOiJIUzI1NiIs..."
+              placeholderTextColor="#555566"
+              value={haForm.token}
+              onChangeText={t => setHaForm({ ...haForm, token: t })}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+            />
+
+            <View style={styles.providerActions}>
+              <TouchableOpacity
+                style={[styles.smallBtn, { backgroundColor: accent }]}
+                onPress={async () => {
+                  await setHaConfig(haForm);
+                  setHaConfigure(!!((haForm.urlLocale || haForm.urlDistante) && haForm.token));
+                  setHaMsg('✅ Configuration Home Assistant enregistrée !');
+                  setTimeout(() => setHaMsg(null), 2500);
+                }}
+              >
+                <Text style={styles.smallBtnTextDark}>Enregistrer</Text>
+              </TouchableOpacity>
+            </View>
+            {haMsg && <Text style={styles.savedKeyText}>{haMsg}</Text>}
+
+            <Text style={styles.infoSmall}>
+              💡 Le jeton se crée dans Home Assistant → clique sur ton profil (en bas à gauche)
+              → tout en bas de la page → "Jetons d'accès longue durée" → "Créer un jeton".
+              Une fois enregistré ici, active le driver "Home Assistant" dans le module
+              Domotique pour voir apparaître tes appareils.
+            </Text>
+          </View>
+
           {/* IA pour Kira */}
           <SectionLabel style={{ marginTop: 22 }}>🌟 Cerveau de Kira (IA)</SectionLabel>
           <Text style={styles.infoSmall}>
@@ -1137,6 +1257,41 @@ export default function ParametresScreen({ navigation }) {
             carte bancaire. Tu peux configurer plusieurs fournisseurs et changer celui qui est
             actif pour Kira à tout moment.
           </Text>
+
+          {/* ── Voix de Kira (lot 82) ── */}
+          <SectionLabel style={{ marginTop: 18 }}>🔊 Voix de Kira</SectionLabel>
+          {apiKeys.gemini ? (
+            <>
+              <Text style={styles.infoSmall}>
+                Une clé Gemini est configurée — Kira utilise sa voix naturelle (au lieu de la
+                voix système du téléphone) partout où elle parle : chat, briefing matinal,
+                Méditation, Écoute rapide. Choisis celle qui lui va le mieux :
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                {VOIX_GEMINI_DISPONIBLES.map(v => {
+                  const active = voixChoisie === v.id;
+                  return (
+                    <TouchableOpacity
+                      key={v.id}
+                      onPress={async () => { setVoixChoisie(v.id); await setVoixGeminiChoisie(v.id); }}
+                      style={[
+                        styles.voixChip,
+                        { borderColor: active ? accent : 'rgba(255,255,255,0.12)', backgroundColor: active ? accent + '22' : 'rgba(255,255,255,0.04)' },
+                      ]}
+                    >
+                      <Text style={{ color: active ? accent : '#ccc', fontSize: 12, fontWeight: active ? '700' : '400' }}>{v.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </>
+          ) : (
+            <Text style={styles.infoSmall}>
+              💡 Ajoute une clé Google Gemini ci-dessus pour donner à Kira une voix beaucoup
+              plus naturelle (au lieu de la voix système un peu robotique du téléphone) — sans
+              rien changer d'autre à ta configuration actuelle.
+            </Text>
+          )}
         </View>
       );
     }
@@ -1351,15 +1506,23 @@ export default function ParametresScreen({ navigation }) {
           <TouchableOpacity style={styles.dangerBtn} onPress={lancerExportDonnees} disabled={exportEnCours}>
             <Text style={styles.dangerBtnText}>{exportEnCours ? '⏳ Export en cours...' : '💾 Exporter mes données (JSON)'}</Text>
           </TouchableOpacity>
+          <Text style={styles.infoSmall}>
+            {dateSauvegardeAuto
+              ? `🕓 Sauvegarde automatique locale la plus récente : ${new Date(dateSauvegardeAuto).toLocaleDateString('fr-FR')} (silencieuse, une fois par semaine — un filet de sécurité en plus de l'export manuel ci-dessus).`
+              : "🕓 Une sauvegarde automatique locale silencieuse aura lieu au prochain lancement de l'app (renouvelée chaque semaine)."}
+          </Text>
           <TouchableOpacity style={styles.dangerBtn} onPress={() => setShowImport(!showImport)}>
             <Text style={styles.dangerBtnText}>📥 Importer une sauvegarde</Text>
           </TouchableOpacity>
           {showImport && (
             <View style={styles.importBox}>
               <Text style={styles.infoSmall}>
-                Ouvre ton fichier .json exporté (Drive, mail, Fichiers...), copie tout son
-                contenu, puis colle-le ci-dessous.
+                Choisis directement ton fichier .json exporté, ou colle son contenu ci-dessous.
               </Text>
+              <TouchableOpacity style={[styles.smallBtn, { backgroundColor: accent, marginBottom: 10 }]} onPress={choisirFichierImport}>
+                <Text style={styles.smallBtnTextDark}>📂 Choisir un fichier</Text>
+              </TouchableOpacity>
+              {fichierImportMsg && <Text style={[styles.savedKeyText, fichierImportMsg.startsWith('⚠️') && { color: PALETTE.pink }]}>{fichierImportMsg}</Text>}
               <TextInput
                 style={styles.importInput}
                 placeholder='{"exporteLe": "...", "donnees": { ... }}'
@@ -1459,6 +1622,7 @@ const styles = StyleSheet.create({
   dangerBtnText: { color: '#ccc', fontSize: 12 },
   // ── Styles section API ──
   providerCard: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: 13, marginBottom: 12, borderWidth: 1 },
+  voixChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 99, borderWidth: 1 },
   providerHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 4 },
   providerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   providerName: { fontSize: 13, fontWeight: '700', color: '#fff' },

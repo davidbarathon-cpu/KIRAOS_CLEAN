@@ -14,6 +14,7 @@ import CoursesScreen from './screens/CoursesScreen';
 import CreerModuleScreen from './screens/CreerModuleScreen';
 import CuisineScreen from './screens/CuisineScreen';
 import CuisineFavorisScreen from './screens/CuisineFavorisScreen';
+import NouveautesScreen from './screens/NouveautesScreen'; // LOT 85
 import DomotiqueScreen from './screens/DomotiqueScreen';
 import HumeurScreen from './screens/HumeurScreen';
 import MinuteurScreen from './screens/MinuteurScreen';
@@ -38,6 +39,7 @@ import TraductionScreen from './screens/TraductionScreen';
 import { getGeoKiraActif, demarrerGeoKira } from './utils/geoKira'; // LOT 54
 import { demanderPermissionNotifications } from './utils/notifications';
 import { getData, initStorage } from './utils/storage';
+import { sauvegarderAutomatiquementSiNecessaire } from './utils/dataBackup'; // LOT 87
 import { getTheme, THEMES } from './utils/theme';
 import WeatherFX from './components/WeatherFX';
 
@@ -71,7 +73,29 @@ QuickActions.setItems([
     id: 'parler-a-kira',
     title: 'Parler à Kira',
     subtitle: 'Lance le micro directement',
-    icon: 'kira_mic', // voir le guide d'installation pour l'icône native correspondante
+    icon: 'kira_mic', // icône configurée dans app.json (plugin expo-quick-actions > androidIcons) — lot 86
+  },
+  // LOT 85 — 3 raccourcis supplémentaires (Android en autorise 4 au total),
+  // pour accéder directement aux actions les plus fréquentes du quotidien
+  // sans ouvrir l'app en entier. Icônes générées et configurées au lot 86
+  // (app.json > plugins > expo-quick-actions > androidIcons).
+  {
+    id: 'ajouter-course',
+    title: 'Ajouter une course',
+    subtitle: 'Ouvre la liste de courses',
+    icon: 'kira_course',
+  },
+  {
+    id: 'voir-agenda',
+    title: "Agenda du jour",
+    subtitle: "Voir mes rendez-vous",
+    icon: 'kira_agenda',
+  },
+  {
+    id: 'nouvelle-note',
+    title: 'Nouvelle note',
+    subtitle: 'Note rapide',
+    icon: 'kira_note',
   },
 ]);
 
@@ -83,6 +107,7 @@ export default function App() {
   useEffect(() => {
     (async () => {
       await initStorage();
+      sauvegarderAutomatiquementSiNecessaire(); // LOT 87 — silencieux, pas d'await volontaire pour ne pas retarder le démarrage
       await demanderPermissionNotifications();
       // ⚠️ Corrige au lot 52 : la couleur de fond de la barre de statut et
       // du fond de navigation entre les écrans était figée sur Cosmos,
@@ -122,19 +147,30 @@ export default function App() {
   // ── Écoute le déclenchement du Shortcut, que l'app soit déjà ouverte
   // (cas "warm start") ou lancée fraîchement depuis le shortcut (cas "cold start") ──
   useEffect(() => {
+    // LOT 85 — un seul point de correspondance action → écran, pour ne pas
+    // dupliquer la logique entre le cas "app déjà ouverte" et "app fermée".
+    // "nouvelle-note" ouvre directement le formulaire d'ajout (params), les
+    // autres n'ont besoin que du nom de l'écran.
+    const routeDuShortcut = id => ({
+      'parler-a-kira': ['EcouteRapide'],
+      'ajouter-course': ['Courses'],
+      'voir-agenda': ['Agenda'],
+      'nouvelle-note': ['Notes', { ouvrirAjout: true }],
+    }[id]);
+
     // Cas où l'app était déjà fermée et vient d'être lancée via le shortcut
     QuickActions.initial?.then(action => {
-      if (action?.id === 'parler-a-kira') {
+      const route = routeDuShortcut(action?.id);
+      if (route) {
         // On attend que la navigation soit prête avant de naviguer
-        setTimeout(() => navigationRef.current?.navigate('EcouteRapide'), 300);
+        setTimeout(() => navigationRef.current?.navigate(...route), 300);
       }
     });
 
     // Cas où l'app tournait déjà en arrière-plan et est ramenée au premier plan via le shortcut
     const sub = QuickActions.addListener(action => {
-      if (action?.id === 'parler-a-kira') {
-        navigationRef.current?.navigate('EcouteRapide');
-      }
+      const route = routeDuShortcut(action?.id);
+      if (route) navigationRef.current?.navigate(...route);
     });
 
     return () => sub?.remove();
@@ -161,6 +197,7 @@ export default function App() {
           <Stack.Screen name="Guitare" component={GuitareScreen} />
           <Stack.Screen name="Cuisine" component={CuisineScreen} />
           <Stack.Screen name="CuisineFavoris" component={CuisineFavorisScreen} />
+          <Stack.Screen name="Nouveautes" component={NouveautesScreen} />
           <Stack.Screen name="Courses" component={CoursesScreen} />
           <Stack.Screen name="Meteo" component={MeteoScreen} />
           <Stack.Screen name="Horoscope" component={HoroscopeScreen} />

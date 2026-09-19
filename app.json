@@ -54,7 +54,29 @@
       "expo-web-browser",
       "./plugins/withPorcupineAssets.js",
       "expo-sharing",
-      "expo-quick-actions",
+      [
+        "expo-quick-actions",
+        {
+          "androidIcons": {
+            "kira_mic": {
+              "foregroundImage": "./assets/shortcut_micro.png",
+              "backgroundColor": "#6C63FF"
+            },
+            "kira_course": {
+              "foregroundImage": "./assets/shortcut_course.png",
+              "backgroundColor": "#43D9AD"
+            },
+            "kira_agenda": {
+              "foregroundImage": "./assets/shortcut_agenda.png",
+              "backgroundColor": "#4FC3F7"
+            },
+            "kira_note": {
+              "foregroundImage": "./assets/shortcut_note.png",
+              "backgroundColor": "#FBBF24"
+            }
+          }
+        }
+      ],
       "expo-secure-store",
       "./plugins/withHealthConnectManifest.js",
       "./plugins/withHealthConnectPermissionDelegate.js",

@@ -9,7 +9,9 @@
 
 import { useCallback, useState } from 'react';
 import {
+    Alert,
     ScrollView,
+    Share,
     StyleSheet,
     Text,
     TextInput,
@@ -29,11 +31,11 @@ const DEFAULT_NOTES = [
   { id: 2, t: 'Exercices guitare', txt: 'Pentatonique 20 min chaque matin avant café\nObjectif : 120 BPM avant fin du mois', c: PALETTE.violet, source: 'manuel' },
 ];
 
-export default function NotesScreen({ navigation }) {
+export default function NotesScreen({ navigation, route }) {
   const theme = useKiraTheme();
   const [notes, setNotes] = useState([]);
   const [editIdx, setEditIdx] = useState(null);
-  const [showAdd, setShowAdd] = useState(false);
+  const [showAdd, setShowAdd] = useState(!!route?.params?.ouvrirAjout); // LOT 85 — raccourci rapide "Nouvelle note"
   const [newNote, setNewNote] = useState({ t: '', txt: '', c: COLORS[0] });
 
   // BUGFIX : même correctif que Courses/Potager/Réveil — une liste de notes vidée par
@@ -66,9 +68,25 @@ export default function NotesScreen({ navigation }) {
     setEditIdx(null);
   };
 
+  // LOT 89 — une note peut contenir du contenu personnel important ; on
+  // demande confirmation avant de la supprimer définitivement (jusqu'ici,
+  // un appui suffisait, sans aucun filet de sécurité).
   const deleteNote = idx => {
-    persist(notes.filter((_, i) => i !== idx));
-    setEditIdx(null);
+    Alert.alert(
+      'Supprimer cette note ?',
+      'Cette action est définitive.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            persist(notes.filter((_, i) => i !== idx));
+            setEditIdx(null);
+          },
+        },
+      ]
+    );
   };
 
   // ── Vue édition d'une note ──
@@ -79,6 +97,9 @@ export default function NotesScreen({ navigation }) {
         <View style={[styles.header, { borderColor: theme.border }]}>
           <BackButton onPress={() => saveNoteEdit(editIdx)} />
           <Text style={styles.headerTitle} numberOfLines={1}>{note.t}</Text>
+          <TouchableOpacity onPress={() => Share.share({ message: `📝 ${note.t}\n\n${note.txt}\n\n— Partagé depuis Kira OS` })} style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
+            <Text style={{ fontSize: 18 }}>📤</Text>
+          </TouchableOpacity>
         </View>
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>
           {note.source === 'kira' && (

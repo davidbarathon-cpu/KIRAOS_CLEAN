@@ -7,7 +7,7 @@
 // ═══════════════════════════════════════════
 
 import { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { BackButton, ProgressBar, SectionLabel } from '../components/Shared';
 import { PALETTE } from '../utils/theme';
@@ -58,8 +58,18 @@ export default function ObjectifsScreen({ navigation }) {
     persister(misAJour);
   };
 
-  const supprimerObjectif = id => {
-    persister(objectifs.filter(o => o.id !== id));
+  // LOT 89 — même filet de sécurité que pour les notes : un objectif (surtout
+  // en cours, avec de la progression déjà enregistrée) mérite une
+  // confirmation avant suppression définitive.
+  const supprimerObjectif = (id, titre) => {
+    Alert.alert(
+      'Supprimer cet objectif ?',
+      `"${titre}" sera définitivement supprimé.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Supprimer', style: 'destructive', onPress: () => persister(objectifs.filter(o => o.id !== id)) },
+      ]
+    );
   };
 
   const enCours = objectifs.filter(o => o.progres < 100);
@@ -89,7 +99,18 @@ export default function ObjectifsScreen({ navigation }) {
               </TouchableOpacity>
             </>
           )}
-          <TouchableOpacity onPress={() => supprimerObjectif(o.id)} style={styles.deleteBtn}>
+          {termine && (
+            // LOT 88 — partage rapide, pour se féliciter publiquement d'un
+            // objectif atteint (WhatsApp, SMS, mail... au choix de l'utilisateur
+            // via la feuille de partage native).
+            <TouchableOpacity
+              onPress={() => Share.share({ message: `🎉 Objectif atteint : "${o.titre}" ! — via Kira OS` })}
+              style={[styles.miniBtn, { backgroundColor: PALETTE.teal + '22', borderColor: PALETTE.teal + '44' }]}
+            >
+              <Text style={[styles.miniBtnText, { color: PALETTE.teal }]}>📤 Partager</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={() => supprimerObjectif(o.id, o.titre)} style={styles.deleteBtn}>
             <Text style={{ color: PALETTE.pink, fontSize: 11 }}>Supprimer</Text>
           </TouchableOpacity>
         </View>

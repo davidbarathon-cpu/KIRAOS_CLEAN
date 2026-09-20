@@ -1657,6 +1657,103 @@ depuis le lot 78) avant suppression définitive sur `screens/NotesScreen.js` et
 confirmation : contenu trivial, ajout/suppression fréquents, une confirmation y serait plus
 gênante qu'utile. Aucune nouvelle dépendance, pas de rebuild.
 
+## ✅ Lot 90 — Géo-Kira multi-lieux (domicile + bureau + ...)
+
+David voulait un deuxième lieu Géo-Kira (bureau, salle de sport...) avec ses propres scènes.
+Bonne nouvelle en creusant le code : l'API native (`Location.startGeofencingAsync`) acceptait
+déjà un tableau de plusieurs zones nommées en un seul appel — la limite venait uniquement de
+notre propre modèle de données (`geokira_domicile`, un seul objet, en dur partout).
+
+**Réécriture complète de `utils/geoKira.js`** : passage d'un domicile unique à un tableau
+`lieux` (clé `geokira_lieux`), chaque lieu ayant sa propre position/rayon/scènes
+arrivée-départ/cooldowns. **Migration automatique et silencieuse** : au premier appel de
+`getLieux()` après cette mise à jour, l'ancien domicile (lots 54-89) est converti en un
+premier lieu "Domicile" avec tout ce qui était déjà configuré (scènes, rayon...) — David n'a
+rien à reconfigurer. Les anciennes clés ne sont plus jamais réécrites après cette migration,
+juste lues une fois.
+
+**`utils/geofencingTask.js`** réécrit : la tâche unique de geofencing gère maintenant
+plusieurs zones, identifie le lieu concerné via `region.identifier` (fourni par
+Android/expo-location), et applique la bonne scène. Notification adaptée : "🏠 Bon retour !"
+réservé au domicile (comportement inchangé), "📍 Arrivée à {nom}" pour tout autre lieu. La
+notification en attente (délai de confirmation anti-faux-positif du lot 65) est maintenant
+indexée par lieu, pour qu'une entrée au bureau n'annule pas par erreur une notification
+d'arrivée à la maison programmée juste avant.
+
+**`utils/geoKiraBriefing.js`** adapté : les réponses du chat ("quand suis-je rentré ?")
+restent volontairement centrées sur le domicile (`lieuId === 'domicile'`) — Kira ne parle pas
+encore des arrivées au bureau dans le chat, ce n'était pas la demande.
+
+**`components/GeoKiraCard.js`** entièrement réécrit : chaque lieu s'affiche en accordéon (un
+seul déplié à la fois, pour ne pas rendre la carte interminable), avec position/rayon/scènes
+propres à chacun. Bouton "+ Ajouter un lieu" en bas : petit formulaire (nom, icône parmi 6,
+capture de position) — pas de `Alert.prompt` utilisé (iOS uniquement, inexistant sur Android),
+un formulaire simple à la place. Un seul interrupteur global "Activer Géo-Kira" reste partagé
+entre tous les lieux (pas de gestion indépendante par lieu, non demandée).
+
+Aucune nouvelle dépendance, pas de rebuild nécessaire.
+
+## ✅ Lot 91 — CORRECTIF URGENT : voix Gemini trop lente et tronquée sur les textes longs
+
+David a testé et signalé deux problèmes sur la voix Gemini (lot 82) : temps de réponse très
+long, et lecture incomplète sur les textes longs (ex : le résumé matinal). Cause confirmée par
+la documentation officielle de Google (ai.google.dev/gemini-api/docs/speech-generation) : le
+modèle TTS a une limite de qualité/durée non garantie sur les sorties longues, et Google
+recommande explicitement de découper les textes en segments plus courts.
+
+**`utils/kiraVoix.js` réécrit** : le texte est découpé en segments d'environ 500 caractères
+(sur des frontières de phrases), lus les uns après les autres. Le segment suivant est généré
+EN PARALLÈLE pendant la lecture du segment actuel (pré-chargement, deux fichiers `.wav` en
+cache alternés pour ne jamais écraser celui en cours de lecture), pour qu'il n'y ait aucun
+blanc à l'enchaînement. Ça règle la troncature (chaque segment reste sous la limite) ET réduit
+le délai avant le début de la lecture (seul le premier segment, court, doit être prêt).
+**Ajout d'un délai de sécurité** (8 secondes) sur le tout premier segment : si Gemini met
+visiblement trop de temps à répondre (réseau lent), bascule automatique sur la voix système
+pour tout le message plutôt que de faire attendre indéfiniment. Un compteur de "session de
+lecture" empêche aussi qu'une ancienne lecture en cours de segments continue de parler
+par-dessus une nouvelle demande (ex: si David enchaîne deux messages au chat rapidement).
+
+Point encore à surveiller après ce correctif : le délai avant le PREMIER segment reste plus
+long qu'avec la voix système (appel réseau incompressible), même si nettement réduit par
+rapport à avant. Si David trouve encore ça trop lent à l'usage, une option de repli serait de
+désactiver Gemini spécifiquement pour les textes longs (briefings) et de le garder seulement
+pour les réponses courtes du chat — pas fait ici, à discuter avec lui d'abord s'il le signale
+à nouveau après ce correctif.
+
+## ✅ Lot 92 — Suggestion de recette à partir de ce qui est déjà acheté
+
+Dernière idée demandée par David : à l'inverse du flux habituel (recette du jour → ce qui
+manque dans les courses), proposer une recette à partir de ce qui est DÉJÀ coché comme acheté
+— pour limiter le gaspillage.
+
+**`utils/cuisineCaller.js`** : nouvelle fonction `suggererRecetteDepuisCourses(itemsCoches,
+appState, providerActif, apiKeys)`. Avec IA configurée : demande une recette sur mesure
+utilisant en priorité les articles cochés (nouveau prompt dédié, réponse JSON à un seul objet
+au lieu du tableau de 3 recettes habituel). Sans IA : cherche, parmi toutes les recettes de
+secours existantes (entrées + plats + desserts confondus), celle qui a le plus d'ingrédients
+correspondant aux articles cochés. Les fonctions de correspondance ingrédient/article
+(`nomIngredientNettoye`, `ingredientCorrespondAArticle`) ont été **déplacées ici depuis
+`CoursesScreen.js`** (où elles vivaient en local depuis le lot 77) pour être réutilisables des
+deux côtés sans duplication.
+
+**`screens/CoursesScreen.js`** : nouveau bouton "🍳 Une recette avec ce que j'ai déjà acheté ?"
+sous le conseil Kira habituel, visible seulement si au moins un article est coché. Affiche le
+résultat dans une carte dépliée (titre, temps, difficulté, ingrédients — ceux déjà cochés
+sont marqués d'un ✓ en couleur —, étapes, conseil), avec un bouton pour la refermer.
+
+Aucune nouvelle dépendance, pas de rebuild.
+
+## ✅ Lot 93 — Guide Tuya détaillé, enfin persisté dans un fichier
+
+Jusqu'ici, la procédure de connexion à Tuya Cloud (créer un projet, lier le compte app,
+récupérer Client ID/Secret/UID) n'existait qu'en conversation — jamais couchée dans un
+fichier, donc reperdue à chaque nouvelle session. Corrigé : nouveau fichier **`GUIDE_TUYA.md`**
+à la racine du dépôt, procédure complète en 7 étapes + tableau de dépannage (région du Data
+Center qui ne correspond pas, abonnement API expiré après le premier mois d'essai gratuit —
+piège classique Tuya, à renouveler tous les ~6 mois). Vérifié contre la documentation
+officielle Tuya à jour (pas juste de mémoire, leur interface a pu changer). **Pour toute
+session future : pointer vers ce fichier plutôt que de réexpliquer la procédure.**
+
 ## 🗂️ Repères techniques pour la suite
 
 - **Deux redémarrages de l'environnement de travail de Claude** sont survenus pendant cette
@@ -1689,8 +1786,10 @@ gênante qu'utile. Aucune nouvelle dépendance, pas de rebuild.
 - OAuth Google Agenda (erreur 400) — en attente que David vérifie son Google Cloud Console
   (type de client "Android", SHA-1 du build preview).
 - Home Assistant — driver livré au lot 80, en attente que David configure ses URLs/jeton et teste.
-- Tuya/Smart Life — driver déjà livré au lot 46, guide de configuration du projet Tuya Cloud
-  donné en conversation (pas dans un fichier) ; pas de retour de David sur Client ID/Secret/UID.
+- Tuya/Smart Life — driver déjà livré au lot 46, guide de configuration détaillé maintenant
+  dans **`GUIDE_TUYA.md`** à la racine du dépôt (lot 93 — ne plus jamais redonner ce guide en
+  conversation, pointer directement vers ce fichier) ; pas de retour de David depuis sur le
+  résultat de la connexion.
 
 **Décision actée avec David (lot 81)** : TP-Link Kasa retiré définitivement de la liste des
 pistes futures — Home Assistant peut déjà piloter des appareils Kasa lui-même une fois

@@ -1,13 +1,29 @@
 // ═══════════════════════════════════════════
-//  GEOKIRA.JS — Notification d'arrivée à la maison
-//  LOT 54
+//  GEOKIRA.JS — Notification d'arrivée à la maison (lot 54)
+//  Support multi-lieux (domicile + bureau + ...) — LOT 90
 //
 //  Utilise le "geofencing" natif d'Android via
 //  expo-location + expo-task-manager : Android
-//  surveille lui-même la zone autour du domicile,
+//  surveille lui-même la ou les zones enregistrées,
 //  même app fermée ou téléphone verrouillé, sans
 //  garder le GPS actif en continu (bien moins
 //  gourmand en batterie qu'un suivi GPS classique).
+//
+//  LOT 90 — David voulait un deuxième lieu (bureau, salle de sport...) avec
+//  ses propres scènes d'arrivée/départ, en plus du domicile. La bonne
+//  nouvelle : l'API native (Location.startGeofencingAsync) accepte DÉJÀ un
+//  tableau de plusieurs zones nommées en un seul appel — la limite venait
+//  uniquement de notre propre modèle de données (un seul "domicile" en dur
+//  partout). Toute la logique passe donc d'un objet unique à un tableau
+//  `lieux`, chaque lieu ayant sa propre position, son rayon, et ses propres
+//  scènes d'arrivée/départ — sans rien perdre de ce qui existait avant.
+//
+//  MIGRATION AUTOMATIQUE : si un ancien domicile (lot 54-89) est détecté au
+//  premier appel de getLieux() après cette mise à jour, il est converti en
+//  un premier lieu "Domicile" — aucune reconfiguration nécessaire pour
+//  David, tout ce qu'il avait déjà réglé (scènes, rayon...) est repris tel
+//  quel. Les anciennes clés de stockage ne sont plus modifiées après ça,
+//  seulement lues une fois pour la migration.
 // ═══════════════════════════════════════════
 
 import * as Location from 'expo-location';
@@ -19,21 +35,20 @@ import { getData, setData } from './storage';
 // de l'app, avant même le premier rendu — voir App.js).
 export const GEOFENCE_TASK_NAME = 'kira-geofence-domicile';
 
-const CLE_DOMICILE = 'geokira_domicile'; // { lat, lng, adresse }
-const CLE_ACTIF = 'geokira_actif';       // bool
-const CLE_RAYON = 'geokira_rayon';       // mètres (50 | 100 | 200 | 500)
-const CLE_SCENE_ARRIVEE = 'geokira_scene_arrivee'; // [{ driverId, id, nom }] — lot 57
-const CLE_SCENE_DEPART = 'geokira_scene_depart'; // [{ driverId, id, nom }] — lot 83
-// LOT 65 — David nous a remonté deux soucis liés : des "Bon retour !" reçus en passant
-// simplement dans la rue (sans s'arrêter), et la crainte que la scène domotique (lumières)
-// s'active trop souvent pour la même raison. Trois réglages ajoutés :
-const CLE_SCENE_ACTIVE = 'geokira_scene_active';           // bool — scène domotique activée explicitement (opt-in, false par défaut)
-const CLE_SCENE_ACTIVE_DEPART = 'geokira_scene_active_depart'; // bool — lot 83, même principe pour le départ
-const CLE_NOTIF_ATTENTE = 'geokira_notif_attente';         // { notificationId, depuis } | null — voir geofencingTask.js
-const CLE_DERNIER_DECLENCHEMENT_SCENE = 'geokira_dernier_declenchement_scene'; // ISOString
-const CLE_DERNIER_DECLENCHEMENT_SCENE_DEPART = 'geokira_dernier_declenchement_scene_depart'; // ISOString — lot 83
+const CLE_LIEUX = 'geokira_lieux'; // LOT 90 — voir forme exacte plus bas
+const CLE_ACTIF = 'geokira_actif'; // bool — un seul interrupteur global pour tous les lieux
 
-const RAYON_PAR_DEFAUT = 200;
+// ── Anciennes clés (lots 54-89), lues uniquement pour la migration ──
+const CLE_DOMICILE_ANCIEN = 'geokira_domicile';
+const CLE_RAYON_ANCIEN = 'geokira_rayon';
+const CLE_SCENE_ARRIVEE_ANCIENNE = 'geokira_scene_arrivee';
+const CLE_SCENE_DEPART_ANCIENNE = 'geokira_scene_depart';
+const CLE_SCENE_ACTIVE_ANCIENNE = 'geokira_scene_active';
+const CLE_SCENE_ACTIVE_DEPART_ANCIENNE = 'geokira_scene_active_depart';
+const CLE_DERNIER_DECLENCHEMENT_ANCIEN = 'geokira_dernier_declenchement_scene';
+const CLE_DERNIER_DECLENCHEMENT_DEPART_ANCIEN = 'geokira_dernier_declenchement_scene_depart';
+
+export const RAYON_PAR_DEFAUT = 200;
 // Délai avant que la notification "Bon retour" ne soit réellement affichée — si tu
 // ressors de la zone avant (juste un passage dans la rue), elle est annulée. Voir
 // geofencingTask.js pour la logique complète.
@@ -47,30 +62,110 @@ export const COOLDOWN_SCENE_MS = 30 * 60 * 1000; // 30 minutes
 export const COOLDOWN_SCENE_DEPART_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
- * Récupère la position enregistrée du domicile (ou null si jamais réglée).
+ * Forme d'un lieu dans le tableau `lieux` :
+ * {
+ *   id, nom, icon,              // ex: 'domicile', 'Domicile', '🏠'
+ *   lat, lng, adresse,
+ *   rayon,                      // mètres
+ *   sceneArrivee: [{driverId, id, nom}], sceneDepart: [...],
+ *   sceneActiveArrivee: bool, sceneActiveDepart: bool,
+ *   dernierDeclenchementArrivee: ISOString|null,
+ *   dernierDeclenchementDepart: ISOString|null,
+ * }
  */
-export async function getDomicile() {
-  return (await getData(CLE_DOMICILE)) || null;
+
+async function migrerAncienDomicileSiNecessaire() {
+  const domicileAncien = await getData(CLE_DOMICILE_ANCIEN);
+  if (!domicileAncien) return [];
+
+  const [rayon, sceneArrivee, sceneDepart, sceneActive, sceneActiveDepart, dernierArrivee, dernierDepart] = await Promise.all([
+    getData(CLE_RAYON_ANCIEN),
+    getData(CLE_SCENE_ARRIVEE_ANCIENNE),
+    getData(CLE_SCENE_DEPART_ANCIENNE),
+    getData(CLE_SCENE_ACTIVE_ANCIENNE),
+    getData(CLE_SCENE_ACTIVE_DEPART_ANCIENNE),
+    getData(CLE_DERNIER_DECLENCHEMENT_ANCIEN),
+    getData(CLE_DERNIER_DECLENCHEMENT_DEPART_ANCIEN),
+  ]);
+
+  return [{
+    id: 'domicile',
+    nom: 'Domicile',
+    icon: '🏠',
+    lat: domicileAncien.lat,
+    lng: domicileAncien.lng,
+    adresse: domicileAncien.adresse || '',
+    rayon: rayon || RAYON_PAR_DEFAUT,
+    sceneArrivee: sceneArrivee || [],
+    sceneDepart: sceneDepart || [],
+    sceneActiveArrivee: sceneActive === true,
+    sceneActiveDepart: sceneActiveDepart === true,
+    dernierDeclenchementArrivee: dernierArrivee || null,
+    dernierDeclenchementDepart: dernierDepart || null,
+  }];
 }
 
 /**
- * Enregistre la position du domicile. lat/lng en degrés décimaux.
+ * Récupère tous les lieux enregistrés. Migre automatiquement l'ancien
+ * domicile mono-zone (lots 54-89) au premier appel si besoin — transparent,
+ * aucune action requise de l'utilisateur.
  */
-export async function setDomicile(lat, lng, adresse = '') {
-  await setData(CLE_DOMICILE, { lat, lng, adresse });
+export async function getLieux() {
+  const lieux = await getData(CLE_LIEUX);
+  if (Array.isArray(lieux)) return lieux;
+
+  const migre = await migrerAncienDomicileSiNecessaire();
+  await setData(CLE_LIEUX, migre); // écrit même si vide, pour ne migrer qu'une seule fois
+  return migre;
+}
+
+export async function setLieux(liste) {
+  await setData(CLE_LIEUX, liste);
+}
+
+export async function getLieu(id) {
+  const lieux = await getLieux();
+  return lieux.find(l => l.id === id) || null;
+}
+
+/** Ajoute un nouveau lieu (ex: "Bureau"). Scènes vides par défaut, comme un
+ * domicile fraîchement configuré. */
+export async function ajouterLieu({ nom, icon, lat, lng, adresse, rayon }) {
+  const lieux = await getLieux();
+  const nouveau = {
+    id: `lieu-${Date.now()}`,
+    nom: nom || 'Nouveau lieu',
+    icon: icon || '📍',
+    lat, lng,
+    adresse: adresse || '',
+    rayon: rayon || RAYON_PAR_DEFAUT,
+    sceneArrivee: [],
+    sceneDepart: [],
+    sceneActiveArrivee: false,
+    sceneActiveDepart: false,
+    dernierDeclenchementArrivee: null,
+    dernierDeclenchementDepart: null,
+  };
+  await setLieux([...lieux, nouveau]);
+  return nouveau;
+}
+
+export async function supprimerLieu(id) {
+  const lieux = await getLieux();
+  await setLieux(lieux.filter(l => l.id !== id));
+}
+
+/** Met à jour un ou plusieurs champs d'un lieu existant (fusion partielle). */
+export async function mettreAJourLieu(id, patch) {
+  const lieux = await getLieux();
+  const misAJour = lieux.map(l => (l.id === id ? { ...l, ...patch } : l));
+  await setLieux(misAJour);
+  return misAJour.find(l => l.id === id);
 }
 
 export async function getGeoKiraActif() {
   const v = await getData(CLE_ACTIF);
   return v === true;
-}
-
-export async function getRayonGeoKira() {
-  return (await getData(CLE_RAYON)) || RAYON_PAR_DEFAUT;
-}
-
-export async function setRayonGeoKira(metres) {
-  await setData(CLE_RAYON, metres);
 }
 
 /**
@@ -104,14 +199,15 @@ export async function verifierPermissionsGeoKira() {
 }
 
 /**
- * Démarre (ou redémarre) la surveillance de la zone domicile.
- * À appeler après avoir enregistré/changé le domicile ou le rayon,
- * et au démarrage de l'app si Géo-Kira est actif.
+ * Démarre (ou redémarre) la surveillance de TOUS les lieux enregistrés en
+ * une seule tâche de geofencing — l'API native accepte directement un
+ * tableau de zones nommées. À appeler après avoir ajouté/modifié/supprimé
+ * un lieu, et au démarrage de l'app si Géo-Kira est actif.
  */
 export async function demarrerGeoKira() {
-  const domicile = await getDomicile();
-  if (!domicile) {
-    return { succes: false, erreur: 'AUCUN_DOMICILE' };
+  const lieux = await getLieux();
+  if (lieux.length === 0) {
+    return { succes: false, erreur: 'AUCUN_LIEU' };
   }
 
   const permissionsOk = await verifierPermissionsGeoKira();
@@ -119,26 +215,25 @@ export async function demarrerGeoKira() {
     return { succes: false, erreur: 'PERMISSIONS_MANQUANTES' };
   }
 
-  const rayon = await getRayonGeoKira();
-
   try {
     // On arrête d'abord une éventuelle surveillance précédente (ex: si
-    // l'utilisateur change son domicile ou le rayon) pour éviter les doublons.
+    // l'utilisateur change un lieu ou son rayon) pour éviter les doublons.
     const dejaActif = await TaskManager.isTaskRegisteredAsync(GEOFENCE_TASK_NAME);
     if (dejaActif) {
       await Location.stopGeofencingAsync(GEOFENCE_TASK_NAME);
     }
 
-    await Location.startGeofencingAsync(GEOFENCE_TASK_NAME, [
-      {
-        identifier: 'domicile',
-        latitude: domicile.lat,
-        longitude: domicile.lng,
-        radius: rayon,
+    await Location.startGeofencingAsync(
+      GEOFENCE_TASK_NAME,
+      lieux.map(l => ({
+        identifier: l.id,
+        latitude: l.lat,
+        longitude: l.lng,
+        radius: l.rayon,
         notifyOnEnter: true,
         notifyOnExit: true,
-      },
-    ]);
+      }))
+    );
 
     await setData(CLE_ACTIF, true);
     return { succes: true, erreur: null };
@@ -148,7 +243,8 @@ export async function demarrerGeoKira() {
 }
 
 /**
- * Arrête complètement la surveillance (bouton "Désactiver" dans les Paramètres).
+ * Arrête complètement la surveillance de tous les lieux (bouton "Désactiver"
+ * dans les Paramètres).
  */
 export async function arreterGeoKira() {
   try {
@@ -165,8 +261,9 @@ export async function arreterGeoKira() {
 
 /**
  * Récupère la position GPS actuelle et la reverse-géocode en adresse lisible.
- * Utilisé par le bouton "📍 Utiliser ma position actuelle comme domicile".
- * Même logique que ParkingScreen (lot 42), réutilisée ici pour cohérence.
+ * Utilisé par le bouton "📍 Utiliser ma position actuelle" (domicile ou tout
+ * autre lieu). Même logique que ParkingScreen (lot 42), réutilisée ici pour
+ * cohérence.
  */
 export async function getPositionActuelleCommeAdresse() {
   const { status } = await Location.requestForegroundPermissionsAsync();
@@ -194,99 +291,36 @@ export async function getPositionActuelleCommeAdresse() {
 }
 
 /**
- * Historique léger des passages détectés (pour affichage dans Paramètres
- * et référence future par Kira dans le chat — "tu es rentré à 18h32").
- * Alimenté par geofencingTask.js à chaque évènement.
+ * Historique léger des passages détectés, tous lieux confondus (pour
+ * affichage dans Paramètres et référence future par Kira dans le chat).
+ * Chaque entrée porte maintenant lieuId/lieuNom (lot 90) pour savoir de
+ * quel lieu il s'agissait. Alimenté par geofencingTask.js à chaque évènement.
  */
 export async function getHistoriqueGeoKira() {
   return (await getData('geokira_historique')) || [];
 }
 
 /**
- * LOT 57 — Scène d'arrivée : liste des appareils domotique (tous drivers
- * confondus) à allumer automatiquement dès que Géo-Kira détecte une entrée
- * dans la zone domicile. Chaque entrée : { driverId, id, nom }.
+ * Vérifie si le cooldown entre deux déclenchements de la scène d'un lieu est
+ * respecté. `type` vaut 'arrivee' ou 'depart'.
  */
-export async function getSceneArrivee() {
-  return (await getData(CLE_SCENE_ARRIVEE)) || [];
-}
-
-export async function setSceneArrivee(liste) {
-  await setData(CLE_SCENE_ARRIVEE, liste);
-}
-
-// ── LOT 65 ──────────────────────────────────────────────────────────
-// La scène domotique (allumage automatique) est maintenant désactivée par
-// défaut, même si des appareils sont déjà cochés dans la liste ci-dessus.
-// L'utilisateur doit l'activer explicitement une fois qu'il a vérifié
-// que le rayon choisi ne déclenche pas Géo-Kira au simple passage dans
-// la rue — évite les lumières qui s'allument "trop souvent" pendant la
-// phase de réglage du rayon.
-
-export async function getSceneActiveArrivee() {
-  const v = await getData(CLE_SCENE_ACTIVE);
-  return v === true;
-}
-
-export async function setSceneActiveArrivee(actif) {
-  await setData(CLE_SCENE_ACTIVE, actif);
-}
-
-/**
- * Vérifie si le cooldown entre deux déclenchements de la scène d'arrivée est
- * respecté (par défaut 30 min, voir COOLDOWN_SCENE_MS). Empêche les lumières
- * de se rallumer à chaque entrée/sortie rapprochée de la zone domicile.
- */
-export async function peutDeclencherScene() {
-  const dernier = await getData(CLE_DERNIER_DECLENCHEMENT_SCENE);
+export function peutDeclencherScene(lieu, type) {
+  const champ = type === 'arrivee' ? 'dernierDeclenchementArrivee' : 'dernierDeclenchementDepart';
+  const cooldown = type === 'arrivee' ? COOLDOWN_SCENE_MS : COOLDOWN_SCENE_DEPART_MS;
+  const dernier = lieu?.[champ];
   if (!dernier) return true;
-  return Date.now() - new Date(dernier).getTime() > COOLDOWN_SCENE_MS;
+  return Date.now() - new Date(dernier).getTime() > cooldown;
 }
 
-export async function marquerSceneDeclenchee() {
-  await setData(CLE_DERNIER_DECLENCHEMENT_SCENE, new Date().toISOString());
+export async function marquerSceneDeclenchee(lieuId, type) {
+  const champ = type === 'arrivee' ? 'dernierDeclenchementArrivee' : 'dernierDeclenchementDepart';
+  await mettreAJourLieu(lieuId, { [champ]: new Date().toISOString() });
 }
 
 export async function getNotifAttente() {
-  return (await getData(CLE_NOTIF_ATTENTE)) || null;
+  return (await getData('geokira_notif_attente')) || null;
 }
 
 export async function setNotifAttente(valeur) {
-  await setData(CLE_NOTIF_ATTENTE, valeur);
-}
-
-/**
- * LOT 83 — Scène de départ : symétrique de la scène d'arrivée (lot 57), mais
- * pour éteindre des appareils (lumières, prises...) quand Géo-Kira détecte
- * une sortie de la zone domicile. Mêmes garde-fous : opt-in explicite
- * (getSceneActiveDepart) + cooldown (peutDeclencherSceneDepart), stockage
- * séparé de la scène d'arrivée pour permettre des appareils différents
- * (ex : éteindre TOUTES les lumières en partant, mais n'en rallumer que
- * certaines en arrivant).
- */
-export async function getSceneDepart() {
-  return (await getData(CLE_SCENE_DEPART)) || [];
-}
-
-export async function setSceneDepart(liste) {
-  await setData(CLE_SCENE_DEPART, liste);
-}
-
-export async function getSceneActiveDepart() {
-  const v = await getData(CLE_SCENE_ACTIVE_DEPART);
-  return v === true;
-}
-
-export async function setSceneActiveDepart(actif) {
-  await setData(CLE_SCENE_ACTIVE_DEPART, actif);
-}
-
-export async function peutDeclencherSceneDepart() {
-  const dernier = await getData(CLE_DERNIER_DECLENCHEMENT_SCENE_DEPART);
-  if (!dernier) return true;
-  return Date.now() - new Date(dernier).getTime() > COOLDOWN_SCENE_DEPART_MS;
-}
-
-export async function marquerSceneDeclencheeDepart() {
-  await setData(CLE_DERNIER_DECLENCHEMENT_SCENE_DEPART, new Date().toISOString());
+  await setData('geokira_notif_attente', valeur);
 }

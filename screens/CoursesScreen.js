@@ -6,6 +6,7 @@
 
 import { useCallback, useState } from 'react';
 import {
+    ActivityIndicator,
     ScrollView,
     StyleSheet,
     Text,
@@ -15,6 +16,8 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { BackButton, SectionLabel } from '../components/Shared';
+import { getAllApiKeys, getActiveAiProvider } from '../utils/apiKeys';
+import { ingredientCorrespondAArticle, suggererRecetteDepuisCourses } from '../utils/cuisineCaller'; // LOT 92
 import { getData, setData } from '../utils/storage';
 import { getTheme, PALETTE } from '../utils/theme';
 import { useKiraTheme } from '../utils/useTheme';
@@ -31,23 +34,12 @@ const SUGGESTIONS_RAPIDES = ['Lait', 'Oeufs', 'Pain', 'Poulet', 'Avocat', 'Banan
 // manque réellement.
 const CLE_CACHE_RECETTES = 'cuisine_recettes_cache';
 
-/** Extrait le nom "utile" d'un ingrédient brut ("500g potiron" -> "potiron"),
- * en retirant quantités/unités usuelles en tête de chaîne. Reste volontairement
- * simple : sert juste à comparer avec les noms d'articles de la liste. */
-function nomIngredientNettoye(ingredientBrut) {
-  return ingredientBrut
-    .toLowerCase()
-    .replace(/^[\d.,/]+\s*(g|kg|ml|cl|l|cuillères?( à (soupe|café))?|c\.à\.[sc]|pincée[s]?|tranches?|gousses?|feuilles?)?\s*(de\s|d')?/i, '')
-    .trim();
-}
-
+// LOT 92 — nomIngredientNettoye()/ingredientCorrespondAArticle() ont déménagé
+// dans utils/cuisineCaller.js (réutilisées aussi par la nouvelle suggestion
+// de recette depuis les courses, voir plus bas) — ce petit alias garde le
+// nom déjà utilisé plus loin dans ce fichier, pour un diff minimal.
 function ingredientDejaDansListe(ingredientBrut, itemsCourses) {
-  const cible = nomIngredientNettoye(ingredientBrut);
-  if (!cible) return true;
-  return itemsCourses.some(i => {
-    const nomArticle = i.n.toLowerCase();
-    return nomArticle.includes(cible) || cible.includes(nomArticle);
-  });
+  return itemsCourses.some(i => ingredientCorrespondAArticle(ingredientBrut, i.n));
 }
 
 const DEFAULT_COURSES = [
@@ -63,6 +55,9 @@ export default function CoursesScreen({ navigation }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newItem, setNewItem] = useState({ n: '', q: '1', cat: CATEGORIES[0] });
   const [recetteDuJour, setRecetteDuJour] = useState(null); // LOT 77
+  const [suggestion, setSuggestion] = useState(null); // LOT 92 — { recette, source } | null
+  const [suggestionEnCours, setSuggestionEnCours] = useState(false);
+  const [suggestionErreur, setSuggestionErreur] = useState(null);
 
   // BUGFIX : l'ancienne condition (`c && c.length ? c : DEFAULT_COURSES`) traitait une
   // liste vidée par l'utilisateur (tableau vide, donc "length" à 0) comme une absence de
@@ -89,6 +84,34 @@ export default function CoursesScreen({ navigation }) {
   const persist = async list => {
     setItems(list);
     await setData('courses', list);
+  };
+
+  // LOT 92 — suggère une recette à partir de ce qui est déjà coché comme
+  // acheté, à l'inverse du flux habituel (recette du jour → liste de
+  // courses). Utile pour limiter le gaspillage : "j'ai déjà ça, qu'est-ce
+  // que je peux en faire ?"
+  const demanderSuggestionRecette = async () => {
+    const itemsCoches = items.filter(i => i.done);
+    if (itemsCoches.length === 0) return;
+
+    setSuggestionEnCours(true);
+    setSuggestionErreur(null);
+    setSuggestion(null);
+    try {
+      const [profil, keys, provider] = await Promise.all([
+        getData('profil'), getAllApiKeys(), getActiveAiProvider(),
+      ]);
+      const appState = { profil: profil || {}, kiraState: 'flow' };
+      const { recette, source, erreur } = await suggererRecetteDepuisCourses(itemsCoches, appState, provider, keys || {});
+      if (erreur || !recette) {
+        setSuggestionErreur("Impossible de trouver une suggestion pour l'instant.");
+      } else {
+        setSuggestion({ recette, source });
+      }
+    } catch (e) {
+      setSuggestionErreur('Une erreur est survenue, réessaie dans un instant.');
+    }
+    setSuggestionEnCours(false);
   };
 
   const toggleItem = id => {
@@ -268,6 +291,60 @@ export default function CoursesScreen({ navigation }) {
           <Text style={styles.coachText}>{conseilKira}</Text>
         </View>
 
+        {/* LOT 92 — À l'inverse du conseil ci-dessus (recette du jour → ce
+            qui manque), suggère une recette à partir de ce qui est DÉJÀ
+            coché comme acheté — pour limiter le gaspillage. */}
+        {items.some(i => i.done) && !suggestion && (
+          <TouchableOpacity
+            style={[styles.suggestionBtn, { borderColor: PALETTE.teal + '40', backgroundColor: PALETTE.teal + '15' }]}
+            onPress={demanderSuggestionRecette}
+            disabled={suggestionEnCours}
+          >
+            {suggestionEnCours
+              ? <ActivityIndicator color={PALETTE.teal} size="small" />
+              : <Text style={{ color: PALETTE.teal, fontSize: 12, fontWeight: '600' }}>🍳 Une recette avec ce que j'ai déjà acheté ?</Text>}
+          </TouchableOpacity>
+        )}
+
+        {suggestionErreur && <Text style={styles.suggestionErreur}>{suggestionErreur}</Text>}
+
+        {suggestion && (
+          <View style={[styles.suggestionCard, { borderColor: PALETTE.teal + '30' }]}>
+            <View style={styles.suggestionHeader}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: PALETTE.teal, letterSpacing: 0.8 }}>
+                {(suggestion.recette.type || 'RECETTE').toUpperCase()}
+              </Text>
+              <TouchableOpacity onPress={() => setSuggestion(null)}>
+                <Text style={{ color: '#888', fontSize: 12 }}>✕ Fermer</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.suggestionTitre}>{suggestion.recette.titre}</Text>
+            <View style={styles.suggestionMeta}>
+              <Text style={styles.suggestionMetaTag}>⏱ {suggestion.recette.temps}</Text>
+              <Text style={styles.suggestionMetaTag}>📊 {suggestion.recette.difficulte}</Text>
+            </View>
+
+            <Text style={[styles.coachLabel, { color: PALETTE.teal, marginTop: 12 }]}>Ingrédients</Text>
+            {(suggestion.recette.ingredients || []).map((ing, i) => {
+              const dejaCoche = ingredientDejaDansListe(ing, items.filter(it => it.done));
+              return (
+                <Text key={i} style={[styles.suggestionIngredient, dejaCoche && { color: PALETTE.teal }]}>
+                  {dejaCoche ? '✓ ' : '• '}{ing}
+                </Text>
+              );
+            })}
+
+            <Text style={[styles.coachLabel, { color: PALETTE.teal, marginTop: 12 }]}>Préparation</Text>
+            {(suggestion.recette.etapes || []).map((etape, i) => (
+              <Text key={i} style={styles.suggestionIngredient}>{i + 1}. {etape}</Text>
+            ))}
+
+            {suggestion.recette.conseil && (
+              <Text style={[styles.coachText, { marginTop: 10, fontStyle: 'italic' }]}>🌟 {suggestion.recette.conseil}</Text>
+            )}
+          </View>
+        )}
+
         <Text style={styles.comingSoon}>
           💡 Dis ou écris "Kira, ajoute du lait" dans le chat, et je l'ajoute directement à ta liste.
         </Text>
@@ -360,5 +437,13 @@ const styles = StyleSheet.create({
   coachBox: { borderRadius: 12, padding: 12, borderWidth: 1, marginTop: 16 },
   coachLabel: { fontSize: 11, fontWeight: '600', marginBottom: 4 },
   coachText: { fontSize: 12, color: '#ccc' },
+  suggestionBtn: { borderRadius: 12, padding: 12, borderWidth: 1, marginTop: 12, alignItems: 'center' },
+  suggestionErreur: { color: PALETTE.pink, fontSize: 12, marginTop: 12, textAlign: 'center' },
+  suggestionCard: { borderRadius: 14, padding: 14, borderWidth: 1, marginTop: 12, backgroundColor: 'rgba(255,255,255,0.04)' },
+  suggestionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  suggestionTitre: { color: '#fff', fontSize: 15, fontWeight: '700', marginTop: 4 },
+  suggestionMeta: { flexDirection: 'row', gap: 12, marginTop: 6 },
+  suggestionMetaTag: { fontSize: 11, color: '#999' },
+  suggestionIngredient: { fontSize: 12.5, color: '#ccc', lineHeight: 19 },
   comingSoon: { fontSize: 11, color: '#333344', textAlign: 'center', marginTop: 14, lineHeight: 16 },
 });

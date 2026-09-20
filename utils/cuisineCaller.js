@@ -57,6 +57,111 @@ const DESSERTS_SECOURS = [
 ];
 
 /**
+ * LOT 92 — Extrait le nom "utile" d'un ingrédient brut ("500g potiron" ->
+ * "potiron"), en retirant quantités/unités usuelles en tête de chaîne.
+ * Reste volontairement simple : sert juste à comparer avec les noms
+ * d'articles de la liste de courses. Reprise de la logique déjà en place
+ * dans CoursesScreen.js (lot 77) pour le "Conseil Kira" — centralisée ici
+ * pour être réutilisable aussi côté suggestion de recette.
+ */
+export function nomIngredientNettoye(ingredientBrut) {
+  return ingredientBrut
+    .toLowerCase()
+    .replace(/^[\d.,/]+\s*(g|kg|ml|cl|l|cuillères?( à (soupe|café))?|c\.à\.[sc]|pincée[s]?|tranches?|gousses?|feuilles?)?\s*(de\s|d')?/i, '')
+    .trim();
+}
+
+export function ingredientCorrespondAArticle(ingredientBrut, nomArticle) {
+  const cible = nomIngredientNettoye(ingredientBrut);
+  if (!cible) return false;
+  const nom = nomArticle.toLowerCase();
+  return nom.includes(cible) || cible.includes(nom);
+}
+
+function compterIngredientsDisponibles(recette, itemsCourses) {
+  return (recette.ingredients || []).filter(ing => itemsCourses.some(item => ingredientCorrespondAArticle(ing, item.n))).length;
+}
+
+function construirePromptRecetteDepuisCourses(nomsArticles, profil) {
+  const prenom = profil?.prenom || "l'utilisateur";
+  return `Tu es Kira, assistante culinaire de ${prenom}. Voici des ingrédients déjà achetés (cochés dans sa liste de courses) : ${nomsArticles.join(', ')}.
+
+Propose UNE recette qui utilise en priorité un maximum de ces ingrédients déjà achetés (tu peux compléter avec 2-3 ingrédients de base courants si nécessaire — huile, sel, épices...).
+
+Réponds UNIQUEMENT avec un objet JSON valide, rien d'autre, dans ce format EXACT :
+
+{
+  "type": "Plat",
+  "titre": "Nom de la recette",
+  "temps": "20 min",
+  "difficulte": "Facile",
+  "ingredients": ["ingrédient 1", "ingrédient 2"],
+  "etapes": ["Étape 1 détaillée.", "Étape 2 détaillée."],
+  "conseil": "Un conseil personnalisé de Kira, qui mentionne que ça utilise ce qu'il a déjà acheté."
+}
+
+Règles :
+- "type" doit être "Entrée", "Plat" ou "Dessert" selon ce qui convient le mieux aux ingrédients
+- Utilise le PLUS POSSIBLE des ingrédients listés ci-dessus
+- Pas de guillemets doubles DANS les textes (utilise des guillemets simples si nécessaire)`;
+}
+
+function extraireRecetteJsonUnique(texte) {
+  let nettoye = texte.replace(/```json|```/g, '').trim();
+  const matchAccolades = nettoye.match(/\{[\s\S]*\}/);
+  let aTraiter = matchAccolades ? matchAccolades[0] : nettoye;
+  aTraiter = aTraiter.replace(/,(\s*[}\]])/g, '$1');
+  return JSON.parse(aTraiter);
+}
+
+/**
+ * LOT 92 — À l'inverse du flux habituel (recette du jour → liste de
+ * courses), suggère UNE recette à partir de ce qui est déjà coché comme
+ * acheté dans la liste de courses — pour limiter le gaspillage. Avec IA
+ * configurée : demande une recette sur mesure. Sans IA : cherche, parmi les
+ * recettes de secours existantes, celle qui a le plus d'ingrédients déjà
+ * cochés dans la liste.
+ */
+export async function suggererRecetteDepuisCourses(itemsCoches, appState, providerActif, apiKeys) {
+  if (!itemsCoches || itemsCoches.length === 0) {
+    return { recette: null, erreur: 'AUCUN_ARTICLE_COCHE' };
+  }
+
+  const { AI_PROVIDERS } = await import('./apiKeys');
+  const providerInfo = AI_PROVIDERS.find(p => p.id === providerActif);
+  const apiKey = providerActif ? apiKeys[providerActif] : null;
+  const nomsArticles = itemsCoches.map(i => i.n);
+
+  if (providerActif && apiKey && providerInfo) {
+    try {
+      const prompt = construirePromptRecetteDepuisCourses(nomsArticles, appState.profil);
+      const { texte, source } = await demanderAKira(prompt, { ...appState, kiraState: 'flow' }, providerActif, apiKey, providerInfo.modeleParDefaut, []);
+      if (source === 'live') {
+        const recette = extraireRecetteJsonUnique(texte);
+        if (recette?.titre) return { recette, source: 'ia', erreur: null };
+      }
+    } catch (e) {
+      console.warn('Suggestion de recette depuis les courses (IA) échouée, repli sur les recettes de secours:', e.message);
+    }
+  }
+
+  // Repli hors-ligne : la recette de secours avec le plus d'ingrédients
+  // déjà cochés dans la liste de courses.
+  const toutesLesRecettes = [
+    ...ENTREES_SECOURS.map(r => ({ ...r, type: 'Entrée' })),
+    ...PLATS_SECOURS.map(r => ({ ...r, type: 'Plat' })),
+    ...DESSERTS_SECOURS.map(r => ({ ...r, type: 'Dessert' })),
+  ];
+  let meilleure = null;
+  let meilleurScore = -1;
+  for (const r of toutesLesRecettes) {
+    const score = compterIngredientsDisponibles(r, itemsCoches);
+    if (score > meilleurScore) { meilleurScore = score; meilleure = r; }
+  }
+  return { recette: meilleure, source: 'offline', erreur: null };
+}
+
+/**
  * Choisit un élément d'un tableau de façon déterministe à partir d'une
  * chaîne (ex: une date) — même date + même tableau = même résultat, mais
  * ça change chaque jour puisque la date change. Contrairement à l'ancien
